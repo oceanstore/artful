@@ -1,4 +1,5 @@
 use crate::node::ArtNode;
+use crate::node16::Node16;
 use crate::node256::Node256;
 use crate::ArtKey;
 use crate::Header;
@@ -8,14 +9,16 @@ use std::ptr::copy_nonoverlapping;
 const EMPTY_INDEX: u8 = 48;
 const FULL_NODE_SIZE: u16 = 48;
 
-pub(crate) struct Node48<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
+pub(crate) struct Node48<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
     pub(crate) header: Header<MAX_PARTIAL_LEN>,
     pub(crate) child_index: [u8; 256], // invert index of children
     pub(crate) children: [ArtNode<K, V, MAX_PARTIAL_LEN>; 48],
     pub(crate) prefixed_child: ArtNode<K, V, MAX_PARTIAL_LEN>,
 }
 
-impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Default for Node48<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
+    for Node48<K, V, MAX_PARTIAL_LEN>
+{
     fn default() -> Node48<K, V, MAX_PARTIAL_LEN> {
         // Why dont' i use macro `vec![]` initialize the children?
         // just like, you know `vec![ArtNode::none(); 16].try_into()...`.
@@ -79,10 +82,10 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Default for Node48<K, V, MAX_PA
     }
 }
 
-impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node48<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node48<K, V, MAX_PARTIAL_LEN> {
     #[inline(always)]
     pub(crate) fn is_full(&self) -> bool {
-        self.header.non_null_children >= FULL_NODE_SIZE
+        self.header.non_null_children == FULL_NODE_SIZE
     }
 
     #[inline(always)]
@@ -152,7 +155,10 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node48<K, V, MAX_PARTIAL_LEN> {
                 pos += 1;
             }
         }
-        self.children[pos] = new_child;
+
+        std::mem::swap(&mut self.children[pos], &mut new_child);
+        assert_eq!(self.children[pos].is_none(), false);
+        assert_eq!(new_child.is_none(), true);
         self.child_index[key.0 as usize] = pos as u8;
         self.header.non_null_children += 1;
     }
@@ -161,29 +167,68 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node48<K, V, MAX_PARTIAL_LEN> {
     #[inline(always)]
     pub(crate) fn grow(&mut self) -> Box<Node256<K, V, MAX_PARTIAL_LEN>> {
         let mut node256: Box<Node256<K, V, MAX_PARTIAL_LEN>> = Box::default();
-        std::mem::swap(&mut self.prefixed_child, &mut node256.prefixed_child);
-        for i in 0..256 {
-            if self.child_index[i] != EMPTY_INDEX {
+        for (byte, index) in self.child_index.iter_mut().enumerate() {
+            if *index != EMPTY_INDEX {
+                assert_eq!(self.children[*index as usize].is_none(), false);
                 std::mem::swap(
-                    &mut node256.children[i],
-                    &mut self.children[self.child_index[i] as usize],
-                )
+                    &mut node256.children[byte],
+                    &mut self.children[*index as usize],
+                );
+                assert_ne!(node256.children[byte].0, self.children[*index as usize].0);
+                *index = EMPTY_INDEX;
             }
         }
-        // for (idx, key) in self.child_index.iter().enumerate() {
-        //     if *key != EMPTY_INDEX {
-        //         std::mem::swap(&mut node256.children[idx], &mut self.children[idx])
-        //     }
-        // }
-
-        // copy the old node header to the new grown node.
-        node256.header = self.header;
+        std::mem::swap(&mut self.prefixed_child, &mut node256.prefixed_child);
+        node256.header.partial.clone_from(&self.header.partial);
+        node256.header.non_null_children = self.header.non_null_children;
+        // node256.header = self.header;
         node256
     }
-}
 
-#[test]
-fn basic() {
-    println!("{}", std::mem::size_of::<Node48<String, i32, 9>>());
-    println!("{}", std::mem::size_of::<[u8; 256]>());
+    pub fn is_few(&self) -> bool {
+        self.header.non_null_children == 16
+    }
+
+    pub(crate) fn remove_child(
+        &mut self,
+        valid_key: (u8, bool),
+    ) -> Option<ArtNode<K, V, MAX_PARTIAL_LEN>> {
+        if !valid_key.1 {
+            return Some(std::mem::take(&mut self.prefixed_child));
+        }
+
+        let index = self.child_index[valid_key.0 as usize];
+        if index != EMPTY_INDEX && !self.children[index as usize].is_none() {
+            // let child =
+            //     std::mem::take(&mut self.children[index as usize]);
+            let mut none = ArtNode::none();
+            std::mem::swap(&mut self.children[index as usize], &mut none);
+            self.child_index[valid_key.0 as usize] = EMPTY_INDEX;
+            self.header.non_null_children -= 1;
+            return Some(none);
+        }
+
+        None
+    }
+
+    pub(crate) fn shrink_to_fit(&mut self) -> Box<Node16<K, V, MAX_PARTIAL_LEN>> {
+        let mut node16: Box<Node16<K, V, MAX_PARTIAL_LEN>> = Box::default();
+        let mut node16_index = 0;
+        for idx in 0..256 {
+            if self.child_index[idx] != EMPTY_INDEX {
+                std::mem::swap(
+                    &mut self.children[self.child_index[idx] as usize],
+                    &mut node16.children[node16_index],
+                );
+                node16.key[node16_index] = idx as u8;
+                node16_index += 1;
+            }
+        }
+
+        std::mem::swap(&mut self.prefixed_child, &mut node16.prefixed_child);
+        // node16.header = self.header;
+        node16.header.partial.clone_from(&self.header.partial);
+        node16.header.non_null_children = node16_index as u16;
+        node16
+    }
 }

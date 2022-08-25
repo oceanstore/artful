@@ -1,12 +1,13 @@
 use crate::ArtKey;
 
+#[derive(Default)]
 #[repr(align(8))]
-pub(crate) struct Leaf<K: ArtKey, V> {
+pub(crate) struct Leaf<K: ArtKey, V: Default> {
     pub(crate) key: K,
     pub(crate) val: V,
 }
 
-impl<K: ArtKey, V> Leaf<K, V> {
+impl<K: ArtKey, V: Default> Leaf<K, V> {
     pub(crate) fn new(key: K, val: V) -> Leaf<K, V> {
         Leaf { key, val }
     }
