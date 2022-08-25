@@ -10,7 +10,7 @@ use std::vec;
 
 use crate::node::ArtNode;
 
-pub trait ArtKey {
+pub trait ArtKey: Default {
     fn get_bytes(&self) -> &[u8];
 
     fn get_mut_bytes(&mut self) -> &mut [u8];
@@ -64,6 +64,16 @@ impl<const MAX_PARTIAL_LEN: usize> Default for Partial<MAX_PARTIAL_LEN> {
         }
     }
 }
+//
+// impl<const MAX_PARTIAL_LEN: usize> Clone for Partial<MAX_PARTIAL_LEN> {
+//     fn clone(&self) -> Partial<MAX_PARTIAL_LEN> {
+//         let mut dst = Partial::default();
+//         dst.len = self.len;
+//         let data_len = std::cmp::min(self.len as usize, MAX_PARTIAL_LEN);
+//         dst.data[..data_len].copy_from_slice(&self.data[..data_len]);
+//         dst
+//     }
+// }
 
 // impl<const MAX_PARTIAL_LEN: usize> From<&Partial<MAX_PARTIAL_LEN>> for Partial<MAX_PARTIAL_LEN> {
 //     fn from(other: &Partial<MAX_PARTIAL_LEN>) -> Partial<MAX_PARTIAL_LEN> {

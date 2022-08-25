@@ -13,14 +13,16 @@ use std::ptr::copy_nonoverlapping;
 
 const FULL_NODE_SIZE: u16 = 16;
 
-pub(crate) struct Node16<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
+pub(crate) struct Node16<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
     pub(crate) header: Header<MAX_PARTIAL_LEN>,
     pub(crate) key: [u8; 16],
     pub(crate) children: [ArtNode<K, V, MAX_PARTIAL_LEN>; 16],
     pub(crate) prefixed_child: ArtNode<K, V, MAX_PARTIAL_LEN>,
 }
 
-impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Default for Node16<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
+    for Node16<K, V, MAX_PARTIAL_LEN>
+{
     fn default() -> Node16<K, V, MAX_PARTIAL_LEN> {
         // Why dont' i use macro `vec![]` initialize the children?
         // just like, you know `vec![ArtNode::none(); 16].try_into()...`.
@@ -28,7 +30,7 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Default for Node16<K, V, MAX_PA
         // the insert critial performacne path. so, we manual do it.
         Node16 {
             header: Default::default(),
-            key: [255; 16],
+            key: [0; 16],
             prefixed_child: ArtNode::default(),
             children: [
                 ArtNode::none(),
@@ -52,10 +54,10 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Default for Node16<K, V, MAX_PA
     }
 }
 
-impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTIAL_LEN> {
     #[inline(always)]
     pub(crate) fn is_full(&self) -> bool {
-        self.header.non_null_children >= FULL_NODE_SIZE
+        self.header.non_null_children == FULL_NODE_SIZE
     }
 
     #[inline(always)]
@@ -74,49 +76,6 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTIAL_LEN> {
         mut new_child: ArtNode<K, V, MAX_PARTIAL_LEN>,
     ) {
         assert!(self.header.non_null_children < 16);
-        // #[cfg(feature = "simd")]
-        // #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-        // {
-        //     let idx = unsafe {
-        //         // vectorized node16 keys.
-        //         let simd_keys = _mm_loadu_si128(self.key.as_ptr() as *const __m128i);
-        //         // create selection mask by search byte
-        //         let simd_mask = _mm_set1_epi8(std::mem::transmute::<u8, i8>(key_byte));
-        //         let vcmp = _mm_cmplt_epi8(simd_keys, simd_mask);
-        //         let vresult = _mm_cmpeq_epi8(vcmp, _mm_set1_epi8(1));
-        //         let mut result: [u8; 16] = [0; 16];
-        //         _mm_store_si128(result.as_mut_ptr() as *mut __m128i, vresult);
-        //         println!(
-        //             "{:?} {}",
-        //             result,
-        //             _mm_movemask_epi8(vresult).trailing_zeros()
-        //         );
-        //         _mm_movemask_epi8(vresult).trailing_zeros() as usize
-        //     };
-        //
-        //     let idx = idx.min(self.header.non_null_children as usize);
-        //     println!("keys = {:?} idx = {}", self.key, idx);
-        //     if !self.children[idx].is_none() {
-        //         let mut i = self.header.non_null_children as usize;
-        //         while i > idx {
-        //             self.children[i as usize] = std::mem::take(&mut self.children[i as usize - 1]);
-        //             self.key[i as usize] = self.key[i as usize - 1];
-        //             i -= 1;
-        //         }
-        //     }
-        //     self.key[idx] = key_byte;
-        //     self.children[idx] = new_child;
-        //     self.header.non_null_children += 1;
-        //     return;
-        // }
-
-        // if prefixed {
-        //     assert!(self.prefixed_child.is_none());
-        //     swap(&mut self.prefixed_child, &mut new_child);
-        //     return;
-        // }
-        //
-
         if !valid_key.1 {
             assert!(self.prefixed_child.is_none());
             std::mem::swap(&mut self.prefixed_child, &mut new_child);
@@ -133,14 +92,17 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTIAL_LEN> {
         if !self.children[index as usize].is_none() {
             let mut i = self.header.non_null_children;
             while i > index {
-                self.children[i as usize] = std::mem::take(&mut self.children[i as usize - 1]);
+                let mut moved = std::mem::take(&mut self.children[i as usize - 1]);
+                std::mem::swap(&mut self.children[i as usize], &mut moved);
+                // self.children[i as usize] = std::mem::take(&mut self.children[i as usize - 1]);
                 self.key[i as usize] = self.key[i as usize - 1];
                 i -= 1;
             }
         }
 
         self.key[index as usize] = valid_key.0;
-        self.children[index as usize] = new_child;
+        std::mem::swap(&mut self.children[index as usize], &mut new_child);
+        // self.children[index as usize] = new_child;
         self.header.non_null_children += 1;
     }
 
@@ -235,8 +197,73 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTIAL_LEN> {
         // }
 
         // copy the old node header to the new grown node.
-        node48.header = self.header;
+        node48.header.partial.clone_from(&self.header.partial);
+        node48.header.non_null_children = self.header.non_null_children;
+        // node48.header = self.header;
         node48
+    }
+
+    #[inline(always)]
+    pub fn is_few(&self) -> bool {
+        self.header.non_null_children < 5
+    }
+
+    pub(crate) fn remove_child(
+        &mut self,
+        valid_key: (u8, bool),
+    ) -> Option<ArtNode<K, V, MAX_PARTIAL_LEN>> {
+        if !valid_key.1 {
+            assert_eq!(self.prefixed_child.is_none(), false);
+            return Some(std::mem::take(&mut self.prefixed_child));
+        }
+
+        let idx = self.find_child_index(valid_key.0)?;
+
+        // TODO: 这一次的查找可以优化为从外部传递.
+        let mut idx = self.find_child_index(valid_key.0)?;
+        let child = std::mem::take(&mut self.children[idx]);
+        self.key[idx] = 0;
+        self.header.non_null_children -= 1;
+
+        // to keep order
+        while idx < self.header.non_null_children as usize {
+            self.key[idx] = self.key[idx + 1];
+            let mut moved = std::mem::take(&mut self.children[idx + 1]);
+            std::mem::swap(&mut self.children[idx], &mut moved);
+            // self.children[idx] = std::mem::take(&mut self.children[idx + 1]);
+            idx += 1
+        }
+
+        // again remaining
+        while idx < 16 {
+            if !self.children[idx].is_none() {
+                break;
+            }
+            let _ = std::mem::take(&mut self.children[idx]);
+            idx += 1
+        }
+
+        Some(child)
+    }
+
+    pub(crate) fn shrink_to_fit(&mut self) -> Box<Node4<K, V, MAX_PARTIAL_LEN>> {
+        let mut node4: Box<Node4<K, V, MAX_PARTIAL_LEN>> = Box::default();
+        let mut node4_index = 0;
+        for i in 0..self.header.non_null_children as usize {
+            std::mem::swap(&mut self.children[i], &mut node4.children[node4_index]);
+            node4.key[node4_index] = self.key[i];
+            node4_index += 1;
+        }
+
+        // assert_eq!(
+        //     node4.header.non_null_children,
+        //     self.header.non_null_children
+        // );
+        std::mem::swap(&mut self.prefixed_child, &mut node4.prefixed_child);
+        // node4.header = self.header;
+        node4.header.partial.clone_from(&self.header.partial);
+        node4.header.non_null_children = node4_index as u16;
+        node4
     }
 }
 

@@ -21,13 +21,13 @@ const NODE_TYPE_MASK: usize = 7;
 const NODE_PTR_MASK: usize = usize::MAX - NODE_TYPE_MASK;
 
 // TODO: impl PartialEq for ArtNode
-pub struct ArtNode<K: ArtKey, V, const MAX_PARTIAL_LEN: usize>(
-    usize,
+pub struct ArtNode<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize>(
+    pub(crate) usize,
     PhantomData<K>,
     PhantomData<V>,
 );
 
-pub(crate) enum ArtNodeRef<'a, K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
+pub(crate) enum ArtNodeRef<'a, K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
     None,
     Leaf(&'a Leaf<K, V>),
     Node4(&'a Node4<K, V, MAX_PARTIAL_LEN>),
@@ -36,7 +36,7 @@ pub(crate) enum ArtNodeRef<'a, K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
     Node256(&'a Node256<K, V, MAX_PARTIAL_LEN>),
 }
 
-pub(crate) enum ArtNodeMut<'a, K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
+pub(crate) enum ArtNodeMut<'a, K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
     None,
     Leaf(&'a mut Leaf<K, V>),
     Node4(&'a mut Node4<K, V, MAX_PARTIAL_LEN>),
@@ -77,7 +77,7 @@ impl LazyExpand {
     ///
     /// **Safety**: the existing_leaf must be a leaf node.
     #[inline]
-    fn expand<K: ArtKey, V, const MAX_PARTIAL_LEN: usize>(
+    fn expand<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize>(
         node: ArtNode<K, V, MAX_PARTIAL_LEN>,
         key: K,
         val: V,
@@ -112,7 +112,7 @@ impl LazyExpand {
 struct PathCompression;
 
 impl PathCompression {
-    fn pessimistic<K: ArtKey, V, const MAX_PARTIAL_LEN: usize>(
+    fn pessimistic<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize>(
         mut node: ArtNode<K, V, MAX_PARTIAL_LEN>,
         partial_mismatch_pos: usize,
         key: K,
@@ -136,6 +136,7 @@ impl PathCompression {
             );
         }
         let mut new_node4 = ArtNode::node4(node4);
+        node.assert_size();
         new_node4.insert_child((key_byte, true), node);
         new_node4.insert_child(
             ArtKeyVerifier::valid(key.get_bytes(), depth + partial_mismatch_pos),
@@ -144,7 +145,7 @@ impl PathCompression {
         return new_node4;
     }
 
-    fn optimistic<K: ArtKey, V, const MAX_PARTIAL_LEN: usize>(
+    fn optimistic<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize>(
         partial_mismatch_pos: usize,
         depth: usize,
         mut node: ArtNode<K, V, MAX_PARTIAL_LEN>,
@@ -166,6 +167,7 @@ impl PathCompression {
             )
         }
         let mut new_node4 = ArtNode::node4(new_boxed_node);
+        node.assert_size();
         new_node4.insert_child(valid_key, node);
         new_node4.insert_child(
             ArtKeyVerifier::valid(key.get_bytes(), depth + partial_mismatch_pos),
@@ -174,7 +176,7 @@ impl PathCompression {
         return new_node4;
     }
 
-    fn compression<K: ArtKey, V, const MAX_PARTIAL_LEN: usize>(
+    fn compression<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize>(
         node: ArtNode<K, V, MAX_PARTIAL_LEN>,
         partial_mismatch_pos: usize,
         key: K,
@@ -207,7 +209,7 @@ impl PathCompression {
     }
 }
 
-impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PARTIAL_LEN> {
     pub(crate) fn get<'a>(
         root: &'a ArtNode<K, V, MAX_PARTIAL_LEN>,
         key: &[u8],
@@ -334,6 +336,7 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PARTIAL_LEN> 
                 }
 
                 // node.add_child_with_grow(false, key.get_bytes()key.get_bytes()[depth], ArtNode::leaf(key, val));
+                node.assert_size();
                 node.insert_child(
                     ArtKeyVerifier::valid(key.get_bytes(), depth),
                     ArtNode::leaf(key, val),
@@ -382,8 +385,80 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PARTIAL_LEN> 
         node: &mut ArtNode<K, V, MAX_PARTIAL_LEN>,
         key: &[u8],
         depth: usize,
-    ) -> Option<Leaf<K, V>> {
-        unimplemented!()
+    ) -> Option<V> {
+        let mut depth = depth;
+        let mut current: &mut ArtNode<K, V, MAX_PARTIAL_LEN> = node;
+        while !current.is_none() && !current.is_leaf() {
+            let header = current.header();
+            if header.partial.len > 0 {
+                let prefix_matched = current.check_prefix_match(key, depth);
+                if prefix_matched != min(MAX_PARTIAL_LEN, header.partial.len as usize) {
+                    return None;
+                }
+                depth += header.partial.len as usize
+            }
+            let next = current.get_mut_child(ArtKeyVerifier::valid(key, depth))?;
+            current = next;
+            depth = depth + 1;
+            // ref mut child
+        }
+
+        match current.get_mut() {
+            ArtNodeMut::None => None,
+            ArtNodeMut::Leaf(leaf) => {
+                return match leaf.matches(key) {
+                    true => {
+                        let mut child = current.remove_child(ArtKeyVerifier::valid(key, depth))?;
+                        child.take_leaf()
+                    }
+                    false => None,
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn remove_child(&mut self, valid_key: (u8, bool)) -> Option<ArtNode<K, V, MAX_PARTIAL_LEN>> {
+        let removed_child = match self.get_mut() {
+            ArtNodeMut::Node4(n4) => n4.remove_child(valid_key),
+            ArtNodeMut::Node16(n16) => n16.remove_child(valid_key),
+            ArtNodeMut::Node48(n48) => n48.remove_child(valid_key),
+            ArtNodeMut::Node256(n256) => n256.remove_child(valid_key),
+            ArtNodeMut::Leaf(_) => Some(std::mem::take(self)),
+            _ => unreachable!(),
+        };
+
+        self.shrink_to_fit();
+        removed_child
+    }
+
+    /// shrink_to_fit
+    fn shrink_to_fit(&mut self) {
+        if !self.is_few() {
+            return;
+        }
+
+        // let mut taken_node = std::mem::take(self);
+        let mut shrink_node = match self.get_mut() {
+            ArtNodeMut::Node4(n4) => n4.shrink_to_fit(), // This fucking ugly.
+            ArtNodeMut::Node16(n16) => ArtNode::node4(n16.shrink_to_fit()),
+            ArtNodeMut::Node48(n48) => ArtNode::node16(n48.shrink_to_fit()),
+            ArtNodeMut::Node256(n256) => ArtNode::node48(n256.shrink_to_fit()),
+            _ => unreachable!(),
+        };
+
+        std::mem::swap(self, &mut shrink_node);
+    }
+
+    fn is_few(&self) -> bool {
+        match self.get_ref() {
+            ArtNodeRef::Node4(n4) => n4.is_few(),
+            ArtNodeRef::Node16(n16) => n16.is_few(),
+            ArtNodeRef::Node48(n48) => n48.is_few(),
+            ArtNodeRef::Node256(n256) => n256.is_few(),
+            ArtNodeRef::Leaf(_) | ArtNodeRef::None => false,
+            // _ => unreachable!(),
+        }
     }
 
     pub(crate) fn none() -> ArtNode<K, V, MAX_PARTIAL_LEN> {
@@ -482,6 +557,33 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PARTIAL_LEN> 
         }
     }
 
+    fn assert_size(&self) {
+        debug_assert_eq!(
+            {
+                let children: &[ArtNode<K, V, MAX_PARTIAL_LEN>] = match self.get_ref() {
+                    ArtNodeRef::Node4(n4) => &n4.children,
+                    ArtNodeRef::Node16(n16) => &n16.children,
+                    ArtNodeRef::Node48(n48) => &n48.children,
+                    ArtNodeRef::Node256(n256) => &n256.children,
+                    _ => &[],
+                };
+
+                children.iter().filter(|child| !child.is_none()).count()
+            },
+            self.len()
+        )
+    }
+
+    fn len(&self) -> usize {
+        match self.get_ref() {
+            ArtNodeRef::Node4(n4) => n4.header.non_null_children as usize,
+            ArtNodeRef::Node16(n16) => n16.header.non_null_children as usize,
+            ArtNodeRef::Node48(n48) => n48.header.non_null_children as usize,
+            ArtNodeRef::Node256(n256) => n256.header.non_null_children as usize,
+            _ => 0,
+        }
+    }
+
     #[inline(always)]
     pub(crate) fn is_full(&self) -> bool {
         match self.get_ref() {
@@ -507,7 +609,7 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PARTIAL_LEN> 
         // Note: taken_node drop here.
     }
 
-    fn header(&self) -> &Header<MAX_PARTIAL_LEN> {
+    pub(crate) fn header(&self) -> &Header<MAX_PARTIAL_LEN> {
         match self.get_ref() {
             ArtNodeRef::Node4(n4) => &n4.header,
             ArtNodeRef::Node16(n16) => &n16.header,
@@ -517,7 +619,7 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PARTIAL_LEN> 
         }
     }
 
-    fn header_mut(&mut self) -> &mut Header<MAX_PARTIAL_LEN> {
+    pub(crate) fn header_mut(&mut self) -> &mut Header<MAX_PARTIAL_LEN> {
         match self.get_mut() {
             ArtNodeMut::Node4(n4) => &mut n4.header,
             ArtNodeMut::Node16(n16) => &mut n16.header,
@@ -535,6 +637,31 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PARTIAL_LEN> 
                 Some(leaf_ref)
             }
             _ => None,
+        }
+    }
+
+    fn take_leaf(&mut self) -> Option<V> {
+        let ptr = self.0;
+        self.0 = 0;
+        match ptr & NODE_TYPE_MASK {
+            NODE_TYPE_LEAF => {
+                let leaf_ptr = (ptr & NODE_PTR_MASK) as *mut Leaf<K, V>;
+                let boxed = unsafe { Box::from_raw(leaf_ptr) };
+                Some(boxed.val)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline(always)]
+    fn dynamic_cast_leaf(self) -> Leaf<K, V> {
+        match self.0 & NODE_TYPE_MASK {
+            NODE_TYPE_LEAF => {
+                let leaf_ptr: *mut Leaf<K, V> = (self.0 & NODE_PTR_MASK) as *mut Leaf<K, V>;
+                let leaf_mut: &mut Leaf<K, V> = unsafe { &mut *leaf_ptr };
+                std::mem::take(leaf_mut)
+            }
+            _ => unreachable!(),
         }
     }
 
@@ -615,7 +742,7 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PARTIAL_LEN> 
     }
 }
 
-impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Drop for ArtNode<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Drop for ArtNode<K, V, MAX_PARTIAL_LEN> {
     fn drop(&mut self) {
         match self.0 & NODE_TYPE_MASK {
             NODE_TYPE_NONE => {}
@@ -644,7 +771,9 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Drop for ArtNode<K, V, MAX_PART
     }
 }
 
-impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Default for ArtNode<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
+    for ArtNode<K, V, MAX_PARTIAL_LEN>
+{
     fn default() -> ArtNode<K, V, MAX_PARTIAL_LEN> {
         ArtNode::none()
     }

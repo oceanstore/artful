@@ -8,18 +8,18 @@ const FULL_NODE_SIZE: u16 = 4;
 
 // #[derive( Clone)]
 /// 16 + 4 + 32 and padding 4
-pub(crate) struct Node4<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
+pub(crate) struct Node4<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
     pub(crate) header: Header<MAX_PARTIAL_LEN>,
-    key: [u8; 4],
-    children: [ArtNode<K, V, MAX_PARTIAL_LEN>; 4],
-    prefixed_child: ArtNode<K, V, MAX_PARTIAL_LEN>,
+    pub(crate) key: [u8; 4],
+    pub(crate) children: [ArtNode<K, V, MAX_PARTIAL_LEN>; 4],
+    pub(crate) prefixed_child: ArtNode<K, V, MAX_PARTIAL_LEN>,
 }
 
-impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Default for Node4<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default for Node4<K, V, MAX_PARTIAL_LEN> {
     fn default() -> Node4<K, V, MAX_PARTIAL_LEN> {
         Node4 {
             header: Default::default(),
-            key: [255; 4],
+            key: [0; 4],
             children: [
                 ArtNode::none(),
                 ArtNode::none(),
@@ -31,10 +31,10 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Default for Node4<K, V, MAX_PAR
     }
 }
 
-impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node4<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node4<K, V, MAX_PARTIAL_LEN> {
     #[inline(always)]
     pub(crate) fn is_full(&self) -> bool {
-        self.header.non_null_children >= FULL_NODE_SIZE
+        self.header.non_null_children == FULL_NODE_SIZE
     }
 
     #[inline(always)]
@@ -100,14 +100,20 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node4<K, V, MAX_PARTIAL_LEN> {
         if !self.children[index as usize].is_none() {
             let mut i = self.header.non_null_children;
             while i > index {
-                self.children[i as usize] = std::mem::take(&mut self.children[i as usize - 1]);
+                let mut moved = std::mem::take(&mut self.children[i as usize - 1]);
+                std::mem::swap(&mut self.children[i as usize], &mut moved);
                 self.key[i as usize] = self.key[i as usize - 1];
                 i -= 1;
             }
         }
 
         self.key[index as usize] = key_byte;
-        let _ = std::mem::replace(&mut self.children[index as usize], new_child);
+        std::mem::swap(&mut self.children[index as usize], &mut new_child);
+
+        if !new_child.is_none() && !new_child.is_leaf() {
+            assert_eq!(0, new_child.header().non_null_children);
+        }
+
         self.header.non_null_children += 1;
     }
 
@@ -127,113 +133,102 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node4<K, V, MAX_PARTIAL_LEN> {
         node16.key[2] = self.key[2];
         node16.key[3] = self.key[3];
         // copy the old node header to the new grown node.
-        node16.header = self.header;
+        node16.header.partial.clone_from(&self.header.partial);
+        node16.header.non_null_children = self.header.non_null_children;
+        // node16.header = self.header;
         node16
     }
-}
 
-#[test]
-#[should_panic]
-fn node4_bad_grow() {
-    let mut n4: Node4<String, i32, 8> = Default::default();
-    let _ = n4.grow();
-}
+    pub fn is_few(&self) -> bool {
+        let mut child_num = self.header.non_null_children;
+        if !self.prefixed_child.is_none() {
+            child_num += 1;
+        }
 
-// #[test]
-// fn node4_basic() {
-//     struct Case {
-//         key_byte: u8,
-//         excepted_key: [u8; 4],
-//         excepted_none_child: bool,
-//         leaf_key: String,
-//         leaf_val: i32,
-//         excepted_children_count: u16,
-//     }
-//
-//     let mut n4: Node4<String, i32, 8> = Default::default();
-//     let mut cases: Vec<Case> = Vec::new();
-//     cases.push(Case {
-//         key_byte: 0,
-//         excepted_key: [0, 255, 255, 255],
-//         excepted_none_child: true,
-//         leaf_key: "foo".to_string(),
-//         leaf_val: 10,
-//         excepted_children_count: 1,
-//     });
-//
-//     cases.push(Case {
-//         key_byte: 254,
-//         excepted_key: [0, 254, 255, 255],
-//         excepted_none_child: true,
-//
-//         leaf_key: "foz".to_string(),
-//         leaf_val: 20,
-//         excepted_children_count: 2,
-//     });
-//
-//     cases.push(Case {
-//         key_byte: 94,
-//         excepted_key: [0, 94, 254, 255],
-//         excepted_none_child: true,
-//         leaf_key: "bar".to_string(),
-//         leaf_val: 30,
-//         excepted_children_count: 3,
-//     });
-//
-//     cases.push(Case {
-//         key_byte: 95,
-//         excepted_key: [0, 94, 95, 254],
-//         excepted_none_child: true,
-//         leaf_key: "baz".to_string(),
-//         leaf_val: 40,
-//         excepted_children_count: 4,
-//     });
-//
-//     for case in cases.iter() {
-//         assert_eq!(
-//             n4.get_child(false, case.key_byte).is_none(),
-//             case.excepted_none_child
-//         );
-//         n4.add_child(
-//             false,
-//             case.key_byte,
-//             ArtNode::leaf(case.leaf_key.clone(), case.leaf_val),
-//         );
-//         assert_eq!(n4.header.non_null_children, case.excepted_children_count);
-//         assert_eq!(n4.key, case.excepted_key);
-//         let node = n4.get_child(false, case.key_byte);
-//         assert_eq!(node.is_some(), true);
-//         match node.unwrap().get_ref() {
-//             ArtNodeRef::Leaf(leaf) => {
-//                 assert_eq!(leaf.key, case.leaf_key.clone());
-//                 assert_eq!(leaf.val, case.leaf_val);
-//             }
-//             _ => unreachable!(),
-//         }
-//
-//         let node = n4.get_mut_child(case.key_byte);
-//         assert_eq!(node.is_some(), true);
-//         match node.unwrap().get_mut() {
-//             ArtNodeMut::Leaf(leaf) => {
-//                 assert_eq!(leaf.key, case.leaf_key.clone());
-//                 assert_eq!(leaf.val, case.leaf_val);
-//             }
-//             _ => unreachable!(),
-//         }
-//     }
-//
-//     n4.add_child(true, 255, ArtNode::leaf("prefix".to_string(), 50));
-//     let node = n4.get_child(true, 255);
-//     assert_eq!(node.is_some(), true);
-//     match node.unwrap().get_ref() {
-//         ArtNodeRef::Leaf(leaf) => {
-//             assert_eq!(leaf.key, "prefix".to_string());
-//             assert_eq!(leaf.val, 50);
-//         }
-//         _ => unreachable!(),
-//     }
-//
-//     let node16 = n4.grow();
-//     assert_eq!(node16.key[0..4], cases[3].excepted_key);
-//     assert_eq!(node16.header.non_null_children, 4);
-// }
+        child_num < 2
+    }
+
+    pub(crate) fn remove_child(
+        &mut self,
+        valid_key: (u8, bool),
+    ) -> Option<ArtNode<K, V, MAX_PARTIAL_LEN>> {
+        if !valid_key.1 {
+            assert_eq!(self.prefixed_child.is_none(), false);
+            return Some(std::mem::take(&mut self.prefixed_child));
+        }
+
+        // TODO: This time the lookup can be optimized to be passed externally.
+        let mut idx = self.find_child_index(valid_key.0)?;
+        self.key[idx] = 0;
+        self.header.non_null_children -= 1;
+        let child = std::mem::take(&mut self.children[idx]);
+
+        // to keep order
+        while idx < self.header.non_null_children as usize {
+            self.key[idx] = self.key[idx + 1];
+            let mut moved = std::mem::take(&mut self.children[idx + 1]);
+            std::mem::swap(&mut self.children[idx], &mut moved);
+            // self.children[idx] = std::mem::take(&mut self.children[idx + 1]);
+            idx += 1
+        }
+
+        // again remaining
+        while idx < 4 {
+            let _ = std::mem::take(&mut self.children[idx]);
+            idx += 1
+        }
+
+        Some(child)
+    }
+
+    fn find_child_index(&self, key: u8) -> Option<usize> {
+        for i in 0..self.header.non_null_children {
+            if self.key[i as usize] == key {
+                return Some(i as usize);
+            }
+        }
+
+        None
+    }
+
+    // shrink node4
+    /// Safety: the node number of children must be equal 1 (include prefix child).
+    pub(crate) fn shrink_to_fit(&mut self) -> ArtNode<K, V, MAX_PARTIAL_LEN> {
+        let mut single_child = std::mem::take(&mut self.children[0]);
+        if single_child.is_none() {
+            assert_eq!(self.prefixed_child.is_none(), false);
+            single_child = std::mem::take(&mut self.prefixed_child);
+        }
+
+        if single_child.is_leaf() {
+            return single_child;
+        }
+
+        // shrink single child
+        // 1. 合并指向单 child 的 key
+        let mut prefix_len = self.header.partial.len as usize;
+        if prefix_len < MAX_PARTIAL_LEN {
+            self.header.partial.data[prefix_len] = self.key[0];
+            prefix_len += 1;
+        }
+
+        // let header = single_child.header_mut();
+        let mut header = Header::<MAX_PARTIAL_LEN>::default();
+        header.partial.clone_from(&single_child.header().partial);
+        header.non_null_children = single_child.header().non_null_children;
+
+        // 2. 合并 child 的 partial
+        if prefix_len < MAX_PARTIAL_LEN {
+            let minimum = std::cmp::min(header.partial.len as usize, MAX_PARTIAL_LEN - prefix_len);
+            self.header.partial.data[prefix_len..prefix_len + minimum]
+                .copy_from_slice(&header.partial.data[..minimum]);
+            prefix_len += minimum;
+        }
+
+        let minimum = std::cmp::min(prefix_len, MAX_PARTIAL_LEN);
+        header.partial.data[..minimum].copy_from_slice(&self.header.partial.data[..minimum]);
+        header.partial.len += (self.header.partial.len + 1) as u32;
+        std::mem::swap(single_child.header_mut(), &mut header);
+        single_child
+    }
+}
