@@ -205,7 +205,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node4<K, V, MAX_PARTIA
         }
 
         // shrink single child
-        // 1. 合并指向单 child 的 key
+        // 1. Merge the key pointing to a single child
         let mut prefix_len = self.header.partial.len as usize;
         if prefix_len < MAX_PARTIAL_LEN {
             self.header.partial.data[prefix_len] = self.key[0];
@@ -217,7 +217,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node4<K, V, MAX_PARTIA
         header.partial.clone_from(&single_child.header().partial);
         header.non_null_children = single_child.header().non_null_children;
 
-        // 2. 合并 child 的 partial
+        // 2. Merge partial parts of the Child
         if prefix_len < MAX_PARTIAL_LEN {
             let minimum = std::cmp::min(header.partial.len as usize, MAX_PARTIAL_LEN - prefix_len);
             self.header.partial.data[prefix_len..prefix_len + minimum]

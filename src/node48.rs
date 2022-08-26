@@ -20,10 +20,6 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
     for Node48<K, V, MAX_PARTIAL_LEN>
 {
     fn default() -> Node48<K, V, MAX_PARTIAL_LEN> {
-        // Why dont' i use macro `vec![]` initialize the children?
-        // just like, you know `vec![ArtNode::none(); 16].try_into()...`.
-        // because it need clone and our intilization with occur on
-        // the insert critial performacne path. so, we manual do it.
         Node48 {
             header: Default::default(),
             prefixed_child: ArtNode::default(),
