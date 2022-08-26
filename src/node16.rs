@@ -11,8 +11,6 @@ use std::arch::x86::*;
 use std::arch::x86_64::*;
 use std::ptr::copy_nonoverlapping;
 
-const FULL_NODE_SIZE: u16 = 16;
-
 pub(crate) struct Node16<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
     pub(crate) header: Header<MAX_PARTIAL_LEN>,
     pub(crate) key: [u8; 16],
@@ -57,7 +55,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
 impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTIAL_LEN> {
     #[inline(always)]
     pub(crate) fn is_full(&self) -> bool {
-        self.header.non_null_children == FULL_NODE_SIZE
+        self.header.non_null_children == 16
     }
 
     #[inline(always)]
@@ -112,8 +110,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTI
             return Some(&self.prefixed_child);
         }
 
-        let index = self.find_child_index(key.0)?;
-        return Some(&self.children[index]);
+        Some(&self.children[self.find_child_index(key.0)?])
     }
 
     pub(crate) fn get_mut_child(
@@ -124,8 +121,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTI
             return Some(&mut self.prefixed_child);
         }
 
-        let index = self.find_child_index(key.0)?;
-        Some(&mut self.children[index])
+        Some(&mut self.children[self.find_child_index(key.0)?])
     }
 
     #[inline]
@@ -185,17 +181,6 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTI
             );
             node48.child_index[self.key[i as usize] as usize] = i as u8;
         }
-        // copy header
-        // node48.header.partial.len = self.header.partial.len;
-        // node48.header.non_null_children = self.header.non_null_children;
-        // unsafe {
-        //     copy_nonoverlapping(
-        //         self.header.partial.data.as_ptr(),
-        //         node48.header.partial.data.as_mut_ptr(),
-        //         self.header.partial.len as usize,
-        //     )
-        // }
-
         // copy the old node header to the new grown node.
         node48.header.partial.clone_from(&self.header.partial);
         node48.header.non_null_children = self.header.non_null_children;
@@ -230,7 +215,6 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTI
             self.key[idx] = self.key[idx + 1];
             let mut moved = std::mem::take(&mut self.children[idx + 1]);
             std::mem::swap(&mut self.children[idx], &mut moved);
-            // self.children[idx] = std::mem::take(&mut self.children[idx + 1]);
             idx += 1
         }
 
@@ -255,10 +239,6 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTI
             node4_index += 1;
         }
 
-        // assert_eq!(
-        //     node4.header.non_null_children,
-        //     self.header.non_null_children
-        // );
         std::mem::swap(&mut self.prefixed_child, &mut node4.prefixed_child);
         // node4.header = self.header;
         node4.header.partial.clone_from(&self.header.partial);

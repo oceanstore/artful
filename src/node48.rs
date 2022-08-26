@@ -3,11 +3,8 @@ use crate::node16::Node16;
 use crate::node256::Node256;
 use crate::ArtKey;
 use crate::Header;
-use std::process::id;
-use std::ptr::copy_nonoverlapping;
 
 const EMPTY_INDEX: u8 = 48;
-const FULL_NODE_SIZE: u16 = 48;
 
 pub(crate) struct Node48<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
     pub(crate) header: Header<MAX_PARTIAL_LEN>,
@@ -81,7 +78,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
 impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node48<K, V, MAX_PARTIAL_LEN> {
     #[inline(always)]
     pub(crate) fn is_full(&self) -> bool {
-        self.header.non_null_children == FULL_NODE_SIZE
+        self.header.non_null_children == 48
     }
 
     #[inline(always)]
@@ -105,12 +102,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node48<K, V, MAX_PARTI
             return Some(&self.prefixed_child);
         }
 
-        let index = self.child_index[key.0 as usize];
-        if index == EMPTY_INDEX {
-            None
-        } else {
-            Some(&self.children[index as usize])
-        }
+        Some(&self.children[self.find_child_index(key.0)?])
     }
 
     pub(crate) fn get_mut_child(
@@ -121,11 +113,16 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node48<K, V, MAX_PARTI
             return Some(&mut self.prefixed_child);
         }
 
-        let index = self.child_index[key.0 as usize];
+        Some(&mut self.children[self.find_child_index(key.0)?])
+    }
+
+    #[inline]
+    fn find_child_index(&self, key: u8) -> Option<usize> {
+        let index = self.child_index[key as usize];
         if index == EMPTY_INDEX {
             None
         } else {
-            Some(&mut self.children[index as usize])
+            Some(index as usize)
         }
     }
 
@@ -193,18 +190,12 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node48<K, V, MAX_PARTI
             return Some(std::mem::take(&mut self.prefixed_child));
         }
 
-        let index = self.child_index[valid_key.0 as usize];
-        if index != EMPTY_INDEX && !self.children[index as usize].is_none() {
-            // let child =
-            //     std::mem::take(&mut self.children[index as usize]);
-            let mut none = ArtNode::none();
-            std::mem::swap(&mut self.children[index as usize], &mut none);
-            self.child_index[valid_key.0 as usize] = EMPTY_INDEX;
-            self.header.non_null_children -= 1;
-            return Some(none);
-        }
-
-        None
+        let index = self.find_child_index(valid_key.0)?;
+        assert_eq!(self.children[index].is_none(), false);
+        let removed = std::mem::take(&mut self.children[index]);
+        self.child_index[valid_key.0 as usize] = EMPTY_INDEX;
+        self.header.non_null_children -= 1;
+        return Some(removed);
     }
 
     pub(crate) fn shrink_to_fit(&mut self) -> Box<Node16<K, V, MAX_PARTIAL_LEN>> {

@@ -319,6 +319,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node256<K, V, MAX_PART
         if !key.1 {
             return Some(&self.prefixed_child);
         }
+
         return Some(&self.children[key.0 as usize]);
     }
 
@@ -329,6 +330,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node256<K, V, MAX_PART
         if !key.1 {
             return Some(&mut self.prefixed_child);
         }
+
         return Some(&mut self.children[key.0 as usize]);
     }
 
@@ -372,7 +374,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node256<K, V, MAX_PART
         }
 
         self.header.non_null_children -= 1;
-        return Some(std::mem::take(&mut self.children[valid_key.0 as usize]));
+        Some(std::mem::take(&mut self.children[valid_key.0 as usize]))
     }
 
     pub(crate) fn shrink_to_fit(&mut self) -> Box<Node48<K, V, MAX_PARTIAL_LEN>> {
