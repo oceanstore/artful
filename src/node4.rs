@@ -4,10 +4,6 @@ use crate::ArtKey;
 use crate::Header;
 use std::mem::take;
 
-const FULL_NODE_SIZE: u16 = 4;
-
-// #[derive( Clone)]
-/// 16 + 4 + 32 and padding 4
 pub(crate) struct Node4<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
     pub(crate) header: Header<MAX_PARTIAL_LEN>,
     pub(crate) key: [u8; 4],
@@ -34,7 +30,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default for Node4<K, V
 impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node4<K, V, MAX_PARTIAL_LEN> {
     #[inline(always)]
     pub(crate) fn is_full(&self) -> bool {
-        self.header.non_null_children == FULL_NODE_SIZE
+        self.header.non_null_children == 4
     }
 
     #[inline(always)]
@@ -52,13 +48,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node4<K, V, MAX_PARTIA
             return Some(&self.prefixed_child);
         }
 
-        for i in 0..self.header.non_null_children {
-            if self.key[i as usize] == key.0 {
-                return Some(&self.children[i as usize]);
-            }
-        }
-
-        return None;
+        Some(&self.children[self.find_child_index(key.0)?])
     }
 
     pub(crate) fn get_mut_child(
@@ -69,13 +59,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node4<K, V, MAX_PARTIA
             return Some(&mut self.prefixed_child);
         }
 
-        for i in 0..self.header.non_null_children {
-            if self.key[i as usize] == key.0 {
-                return Some(&mut self.children[i as usize]);
-            }
-        }
-
-        return None;
+        Some(&mut self.children[self.find_child_index(key.0)?])
     }
 
     pub(crate) fn insert_child(
@@ -168,7 +152,6 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node4<K, V, MAX_PARTIA
             self.key[idx] = self.key[idx + 1];
             let mut moved = std::mem::take(&mut self.children[idx + 1]);
             std::mem::swap(&mut self.children[idx], &mut moved);
-            // self.children[idx] = std::mem::take(&mut self.children[idx + 1]);
             idx += 1
         }
 
@@ -181,6 +164,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node4<K, V, MAX_PARTIA
         Some(child)
     }
 
+    #[inline]
     fn find_child_index(&self, key: u8) -> Option<usize> {
         for i in 0..self.header.non_null_children {
             if self.key[i as usize] == key {
