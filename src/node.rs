@@ -62,13 +62,14 @@ struct LazyExpand;
 
 impl LazyExpand {
     #[inline(always)]
-    fn longest_common_partial(leaf_key1: &[u8], leaf_key2: &[u8], depth: usize) -> usize {
+    fn longest_common_prefix(leaf_key1: &[u8], leaf_key2: &[u8], depth: usize) -> usize {
         let max_len = min(leaf_key1.len(), leaf_key2.len()) - depth;
         for index in 0..max_len {
             if leaf_key1[depth + index] != leaf_key2[index + depth] {
                 return index;
             }
         }
+
         return max_len;
     }
 
@@ -83,14 +84,10 @@ impl LazyExpand {
         val: V,
         depth: usize,
     ) -> ArtNode<K, V, MAX_PARTIAL_LEN> {
-        let leaf_key = node
-            .cast_leaf_ref()
-            .expect("node casting leaf fail")
-            .key
-            .get_bytes();
         let new_leaf_key = key.get_bytes();
+        let leaf_key = node.static_cast_ref_leaf().key.get_bytes();
 
-        let longest_partial_len = LazyExpand::longest_common_partial(leaf_key, new_leaf_key, depth);
+        let longest_partial_len = LazyExpand::longest_common_prefix(leaf_key, new_leaf_key, depth);
         // copy matched longest prefix to node4
         let mut node4: Box<Node4<K, V, MAX_PARTIAL_LEN>> = Box::default();
         node4.header.partial.len = longest_partial_len as u32;
@@ -109,106 +106,6 @@ impl LazyExpand {
     }
 }
 
-struct PathCompression;
-
-impl PathCompression {
-    fn pessimistic<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize>(
-        mut node: ArtNode<K, V, MAX_PARTIAL_LEN>,
-        partial_mismatch_pos: usize,
-        key: K,
-        val: V,
-        depth: usize,
-        node4: Box<Node4<K, V, MAX_PARTIAL_LEN>>,
-    ) -> ArtNode<K, V, MAX_PARTIAL_LEN> {
-        let header = node.header_mut();
-        let key_byte = header.partial.data[partial_mismatch_pos];
-        header.partial.len -= (partial_mismatch_pos + 1) as u32;
-        assert!(header.partial.len < MAX_PARTIAL_LEN as u32);
-        unsafe {
-            std::ptr::copy(
-                header
-                    .partial
-                    .data
-                    .as_ptr()
-                    .offset(partial_mismatch_pos as isize + 1),
-                header.partial.data.as_mut_ptr(),
-                min(MAX_PARTIAL_LEN, header.partial.len as usize),
-            );
-        }
-        let mut new_node4 = ArtNode::node4(node4);
-        node.assert_size();
-        new_node4.insert_child((key_byte, true), node);
-        new_node4.insert_child(
-            ArtKeyVerifier::valid(key.get_bytes(), depth + partial_mismatch_pos),
-            ArtNode::leaf(key, val),
-        );
-        return new_node4;
-    }
-
-    fn optimistic<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize>(
-        partial_mismatch_pos: usize,
-        depth: usize,
-        mut node: ArtNode<K, V, MAX_PARTIAL_LEN>,
-        key: K,
-        val: V,
-        new_boxed_node: Box<Node4<K, V, MAX_PARTIAL_LEN>>,
-    ) -> ArtNode<K, V, MAX_PARTIAL_LEN> {
-        node.header_mut().partial.len -= (partial_mismatch_pos + 1) as u32;
-        let leaf = ArtNode::minimum_child(&node).expect("the inner node get minimum child fail");
-        let key_bytes = leaf.key.get_bytes();
-        let valid_key = ArtKeyVerifier::valid(key_bytes, depth + partial_mismatch_pos);
-        unsafe {
-            copy_nonoverlapping(
-                key_bytes
-                    .as_ptr()
-                    .offset((depth + partial_mismatch_pos + 1) as isize),
-                node.header_mut().partial.data.as_mut_ptr(),
-                min(MAX_PARTIAL_LEN, node.header().partial.len as usize),
-            )
-        }
-        let mut new_node4 = ArtNode::node4(new_boxed_node);
-        node.assert_size();
-        new_node4.insert_child(valid_key, node);
-        new_node4.insert_child(
-            ArtKeyVerifier::valid(key.get_bytes(), depth + partial_mismatch_pos),
-            ArtNode::leaf(key, val),
-        );
-        return new_node4;
-    }
-
-    fn compression<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize>(
-        node: ArtNode<K, V, MAX_PARTIAL_LEN>,
-        partial_mismatch_pos: usize,
-        key: K,
-        val: V,
-        depth: usize,
-    ) -> ArtNode<K, V, MAX_PARTIAL_LEN> {
-        // copy matched partial from old node to new node.
-        // Note: The match may exceed the maximum of the vector store, so take the minimum of both.
-        // Artful uses mixed compression, So the actual storage length of partial can exceed the
-        // maximum value of the vector.
-        let mut node4: Box<Node4<K, V, MAX_PARTIAL_LEN>> = Box::default();
-        let old_node_header = node.header();
-        let copy_len = min(partial_mismatch_pos, MAX_PARTIAL_LEN);
-        node4.header.partial.data[..copy_len]
-            .copy_from_slice(&old_node_header.partial.data[..copy_len]);
-        node4.header.partial.len = partial_mismatch_pos as u32;
-
-        if old_node_header.partial.len as usize <= MAX_PARTIAL_LEN {
-            return PathCompression::pessimistic(
-                node,
-                partial_mismatch_pos,
-                key,
-                val,
-                depth,
-                node4,
-            );
-        } else {
-            return PathCompression::optimistic(partial_mismatch_pos, depth, node, key, val, node4);
-        }
-    }
-}
-
 impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PARTIAL_LEN> {
     pub(crate) fn get<'a>(
         root: &'a ArtNode<K, V, MAX_PARTIAL_LEN>,
@@ -219,7 +116,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PART
         let mut current: &ArtNode<K, V, MAX_PARTIAL_LEN> = &*root;
         while !current.is_none() {
             if current.is_leaf() {
-                let leaf = current.cast_leaf_ref().expect("cast to ref leaf exception");
+                let leaf = current.static_cast_ref_leaf();
                 // handles lazy expansion by checking that the
                 // encountered leaf fully matches the key.
                 if leaf.matches(key) {
@@ -317,18 +214,11 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PART
                     if mismatched_pos >= header.partial.len as usize {
                         depth += header.partial.len as usize;
                     } else {
-                        *node = PathCompression::compression(
-                            take(node),
-                            mismatched_pos,
-                            key,
-                            val,
-                            depth,
-                        );
+                        node.compression(mismatched_pos, key, depth, val);
                         return true;
                     }
                 }
 
-                // TODO: ArtKeyValidater
                 if let Some(child) =
                     node.get_mut_child(ArtKeyVerifier::valid(key.get_bytes(), depth))
                 {
@@ -344,6 +234,85 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PART
                 return true;
             }
         }
+    }
+
+    #[inline]
+    fn compression(&mut self, prefix_mismatch_pos: usize, key: K, depth: usize, val: V) {
+        let mut old_node = std::mem::replace(self, ArtNode::node4(Box::default()));
+        // self is already new node
+
+        let old_node_header = old_node.header();
+        let new_node_header = self.header_mut();
+
+        // copy matched partial from old node to new node.
+        let max_copy_len = min(prefix_mismatch_pos, MAX_PARTIAL_LEN);
+        new_node_header.partial.data[..max_copy_len]
+            .copy_from_slice(&old_node_header.partial.data[..max_copy_len]);
+        new_node_header.partial.len = prefix_mismatch_pos as u32;
+
+        // Note: The match may exceed the maximum of the vector store, so take the minimum of both.
+        // Artful uses mixed compression, So the actual storage length of partial can exceed the
+        // maximum value of the vector.
+        // pessimistic compression
+        if old_node_header.partial.len as usize <= MAX_PARTIAL_LEN {
+            let old_node_header = old_node.header_mut();
+            let old_node_byte = old_node_header.partial.data[prefix_mismatch_pos];
+            old_node_header.partial.len -= (prefix_mismatch_pos + 1) as u32;
+            old_node_header
+                .partial
+                .data
+                .rotate_left(prefix_mismatch_pos + 1);
+            // unsafe {
+            //     std::ptr::copy(
+            //         old_node_header
+            //             .partial
+            //             .data
+            //             .as_ptr()
+            //             .offset(prefix_mismatch_pos as isize + 1),
+            //         old_node_header.partial.data.as_mut_ptr(),
+            //         min(MAX_PARTIAL_LEN, old_node_header.partial.len as usize),
+            //     );
+            // }
+            self.insert_child((old_node_byte, true), old_node);
+            self.insert_child(
+                ArtKeyVerifier::valid(key.get_bytes(), depth + prefix_mismatch_pos),
+                ArtNode::leaf(key, val),
+            );
+
+            return;
+        }
+
+        // optimistic compression
+        // TODO: optimization the Header::default() to zero size.
+        let mut old_node_header = std::mem::take(old_node.header_mut());
+        let leaf =
+            ArtNode::minimum_child(&old_node).expect("the inner node get minimum child fail");
+
+        let leaf_key_bytes = leaf.key.get_bytes();
+        let valid_key = ArtKeyVerifier::valid(leaf_key_bytes, depth + prefix_mismatch_pos);
+
+        // TODO add proof.
+        old_node_header.partial.len -= (prefix_mismatch_pos + 1) as u32;
+        let max_copy_len = min(MAX_PARTIAL_LEN, old_node_header.partial.len as usize);
+        let start = depth + prefix_mismatch_pos + 1;
+        let end = start + max_copy_len;
+        old_node_header.partial.data[..max_copy_len].copy_from_slice(&leaf_key_bytes[start..end]);
+
+        std::mem::swap(&mut old_node_header, old_node.header_mut());
+        // unsafe {
+        //     copy_nonoverlapping(
+        //         key_bytes
+        //             .as_ptr()
+        //             .offset((depth + prefix_mismatch_pos + 1) as isize),
+        //         old_node.header_mut().partial.data.as_mut_ptr(),
+        //         min(MAX_PARTIAL_LEN, old_node.header().partial.len as usize),
+        //     )
+        // }
+        self.insert_child(valid_key, old_node);
+        self.insert_child(
+            ArtKeyVerifier::valid(key.get_bytes(), depth + prefix_mismatch_pos),
+            ArtNode::leaf(key, val),
+        );
     }
 
     #[inline]
@@ -461,6 +430,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PART
         }
     }
 
+    /// none actually no memory allocation.
     pub(crate) fn none() -> ArtNode<K, V, MAX_PARTIAL_LEN> {
         ArtNode(NODE_TYPE_NONE, PhantomData, PhantomData)
     }
@@ -629,14 +599,32 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PART
         }
     }
 
-    pub(crate) fn cast_leaf_ref(&self) -> Option<&Leaf<K, V>> {
+    /// Convert node to ref leaf type. It's similar to the `static_cast` in C++ and
+    /// equivalent asm following:
+    /// ```asm
+    /// example::ArtNode<K,V,_>::static_cast_ref_leaf:
+    ///         push    rax
+    ///         mov     qword ptr [rsp], rdi
+    ///         mov     rax, qword ptr [rdi]
+    ///         and     rax, 7
+    ///         cmp     rax, 5
+    ///         jne     .LBB58_2 # jmp unreachable!() if rax equal to five.
+    ///         mov     rax, qword ptr [rsp]
+    ///         mov     rax, qword ptr [rax]
+    ///         and     rax, -8
+    ///         pop     rcx
+    ///         ret
+    /// ```
+    #[inline]
+    const fn static_cast_ref_leaf(&self) -> &Leaf<K, V> {
         match self.0 & NODE_TYPE_MASK {
             NODE_TYPE_LEAF => {
+                // mov rax, qword ptr [rax]
                 let leaf_ptr: *const Leaf<K, V> = (self.0 & NODE_PTR_MASK) as *const Leaf<K, V>;
                 let leaf_ref: &Leaf<K, V> = unsafe { &*leaf_ptr };
-                Some(leaf_ref)
+                leaf_ref
             }
-            _ => None,
+            _ => unreachable!(),
         }
     }
 
