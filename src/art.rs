@@ -30,10 +30,13 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Art<K, V, MAX_PARTIAL_
         ArtNode::get(&self.root, key.get_bytes(), 0)
     }
 
-    pub fn insert(&mut self, key: K, val: V) {
-        if ArtNode::insert(&mut self.root, key, val, 0) {
-            self.size += 1
+    pub fn insert(&mut self, key: K, val: V) -> Option<V> {
+        if let Some(old_val) = ArtNode::insert(&mut self.root, key, val, 0) {
+            return Some(old_val);
         }
+
+        self.size += 1;
+        None
     }
 
     pub fn remove(&mut self, key: &K) -> Option<V> {
@@ -128,7 +131,7 @@ fn basic_art() {
 fn basic_one_hundred() {
     let mut art = Art::<i32, i32, 8>::new();
     for i in (0..1000000).rev() {
-        art.insert(i, i);
+        assert_eq!(art.insert(i, i), None);
     }
 
     for i in 0..1000000 {

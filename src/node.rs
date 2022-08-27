@@ -177,19 +177,18 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PART
         key: K,
         val: V,
         depth: usize,
-    ) -> bool {
+    ) -> Option<V> {
         let mut depth = depth;
         match node.get_mut() {
             ArtNodeMut::None => {
                 *node = ArtNode::leaf(key, val);
-                true
+                None
             }
 
             ArtNodeMut::Leaf(leaf) => {
                 if leaf.matches(key.get_bytes()) {
                     // TODO: Can support leaf multi version?
-                    leaf.val = val;
-                    return false;
+                    return Some(std::mem::replace(&mut leaf.val, val));
                 }
                 // expand leaf
                 *node = LazyExpand::expand::<K, V, MAX_PARTIAL_LEN>(
@@ -198,7 +197,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PART
                     val,
                     depth,
                 );
-                true
+                None
             }
 
             _ => {
@@ -215,7 +214,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PART
                         depth += header.partial.len as usize;
                     } else {
                         node.compression(mismatched_pos, key, depth, val);
-                        return true;
+                        return None;
                     }
                 }
 
@@ -231,7 +230,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PART
                     ArtKeyVerifier::valid(key.get_bytes(), depth),
                     ArtNode::leaf(key, val),
                 );
-                return true;
+                return None;
             }
         }
     }
