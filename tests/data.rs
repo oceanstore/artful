@@ -5,7 +5,11 @@ mod dataset_test {
     use std::io::{BufRead, BufReader};
     use std::path::PathBuf;
 
-    const FILES: [&'static str; 3] = ["tests/data/words.txt", "tests/data/uuid.txt", "tests/data/hsk_words.txt"];
+    const FILES: [&'static str; 3] = [
+        "tests/data/words.txt",
+        "tests/data/uuid.txt",
+        "tests/data/hsk_words.txt",
+    ];
 
     fn manifest_dir() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -25,7 +29,7 @@ mod dataset_test {
             for (index, line) in read_dataset(*file).lines().enumerate() {
                 let line = line.expect("read words line failed");
                 assert_eq!(art.size(), index);
-                art.insert(line.clone(), line.clone());
+                assert_eq!(art.insert(line.clone(), line.clone()), None);
             }
         }
     }
@@ -37,9 +41,9 @@ mod dataset_test {
             let mut lines = 0;
             for line in read_dataset(*file).lines() {
                 let line = line.expect("read words line failed");
-                art.insert(line.clone(), line.clone());
+                assert_eq!(art.insert(line.clone(), line.clone()), None);
                 assert_eq!(art.get(&line), Some(&line));
-                lines+=1;
+                lines += 1;
             }
             assert_eq!(art.size(), lines);
         }
@@ -53,8 +57,8 @@ mod dataset_test {
             let read_buf = read_dataset(*file);
             for line in read_buf.lines() {
                 let line = line.expect("read words line failed");
-                art.insert(line.clone(), line.clone());
-                lines+=1;
+                assert_eq!(art.insert(line.clone(), line.clone()), None);
+                lines += 1;
             }
             assert_eq!(art.size(), lines);
 
@@ -65,7 +69,6 @@ mod dataset_test {
                 assert_eq!(art.get(&line), Some(&line));
                 assert_eq!(art.remove(&line), Some(line.clone()));
                 assert_eq!(art.get(&line), None);
-
             }
             assert_eq!(art.size(), 0);
         }
@@ -80,11 +83,11 @@ mod dataset_test {
             for line in read_buf.lines() {
                 let line = line.expect("read words line failed");
                 assert_eq!(art.get(&line), None);
-                art.insert(line.clone(), line.clone());
+                assert_eq!(art.insert(line.clone(), line.clone()), None);
                 assert_eq!(art.get(&line), Some(&line));
                 assert_eq!(art.remove(&line), Some(line.clone()));
                 assert_eq!(art.get(&line), None);
-                lines+=1;
+                lines += 1;
             }
             assert_eq!(art.size(), 0);
         }
@@ -99,8 +102,8 @@ mod dataset_test {
             let read_buf = read_dataset(*file);
             for line in read_buf.lines() {
                 let line = line.expect("read words line failed");
-                art.insert(line.clone(), line.clone());
-                lines+=1;
+                assert_eq!(art.insert(line.clone(), line.clone()), None);
+                lines += 1;
             }
             assert_eq!(art.size(), lines);
 
@@ -124,7 +127,7 @@ mod dataset_test {
                 let byte_len = line.as_str().as_bytes().len();
                 if byte_len >= byte_len_range.0 && byte_len <= byte_len_range.1 {
                     assert_eq!(art.get(&line), None);
-                    art.insert(line.clone(), line.clone());
+                    assert_eq!(art.insert(line.clone(), line.clone()), None);
                     assert_eq!(art.get(&line), Some(&line));
                 }
             }
@@ -147,7 +150,7 @@ mod dataset_test {
         ];
 
         for (key, val) in cases.iter() {
-            art.insert(key.clone(), *val);
+            assert_eq!(art.insert(key.clone(), *val), None);
         }
 
         for (key, val) in cases.iter() {
@@ -165,7 +168,7 @@ mod dataset_test {
         ];
 
         for (key, val) in cases.iter() {
-            art.insert(key.clone(), *val);
+            assert_eq!(art.insert(key.clone(), *val), None);
         }
 
         for (key, val) in cases.iter() {
