@@ -5,6 +5,7 @@ mod node16;
 mod node256;
 mod node4;
 mod node48;
+mod simd;
 pub use art::Art;
 
 use std::alloc::alloc;

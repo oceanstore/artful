@@ -72,6 +72,25 @@ mod dataset_test {
     }
 
     #[test]
+    fn test_get_insert_remove_get() {
+        for file in FILES.iter() {
+            let mut art = Art::<String, String>::new();
+            let mut lines = 0;
+            let read_buf = read_dataset(*file);
+            for line in read_buf.lines() {
+                let line = line.expect("read words line failed");
+                assert_eq!(art.get(&line), None);
+                art.insert(line.clone(), line.clone());
+                assert_eq!(art.get(&line), Some(&line));
+                assert_eq!(art.remove(&line), Some(line.clone()));
+                assert_eq!(art.get(&line), None);
+                lines+=1;
+            }
+            assert_eq!(art.size(), 0);
+        }
+    }
+
+    #[test]
     fn test_insert_random_remove() {
         let byte_len_range = (9, 12); // remove this of range byte len
         for file in FILES.iter() {

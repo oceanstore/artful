@@ -24,8 +24,8 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
     fn default() -> Node16<K, V, MAX_PARTIAL_LEN> {
         // Why dont' i use macro `vec![]` initialize the children?
         // just like, you know `vec![ArtNode::none(); 16].try_into()...`.
-        // because it need clone and our intilization with occur on
-        // the insert critial performacne path. so, we manual do it.
+        // because it need clone and our initialization with occur on
+        // the insert critical performance path. so, we manual do it.
         Node16 {
             header: Default::default(),
             key: [0; 16],
@@ -67,6 +67,48 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTI
         }
     }
 
+    #[inline]
+    fn find_less_than_index(&mut self, key: u8) -> u16 {
+        let mask = (1 << self.header.non_null_children) - 1;
+        #[cfg(feature = "simd")]
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        if is_x86_feature_detected!("sse2") {
+            unsafe {
+                let lt = _mm_cmplt_epi8(
+                    _mm_set1_epi8(std::mem::transmute::<u8, i8>(key)),
+                    _mm_loadu_si128(self.key.as_ptr() as *const __m128i),
+                );
+                let bit_fields = _mm_movemask_epi8(lt) & mask;
+                if bit_fields != 0 {
+                    return bit_fields.trailing_zeros() as u16;
+                }
+
+                return self.header.non_null_children;
+            }
+        }
+
+        #[cfg(feature = "simd")]
+        #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+        if std::arch::is_aarch64_feature_detected!("neon") {
+            unsafe {
+                let lt = vcltq_u8(vdupq_n_u8(key), vld1q_u8(self.key.as_ptr()));
+                let bit_fields = _mm_movemask_epi8(lt) & mask;
+                if bit_fields != 0 {
+                    return bit_fields.trailing_zeros() as u16;
+                }
+
+                return self.header.non_null_children;
+            }
+        }
+
+        let mut index = 0;
+        while (index < self.header.non_null_children) && self.key[index as usize] < key {
+            index += 1;
+        }
+
+        index
+    }
+
     /// Safety: grow.
     pub(crate) fn insert_child(
         &mut self,
@@ -80,13 +122,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTI
             return;
         }
 
-        // find first index greater than or equal to key_byte
-        // TODO: use simd?
-        let mut index = 0;
-        while (index < self.header.non_null_children) && self.key[index as usize] < valid_key.0 {
-            index += 1;
-        }
-
+        let index = self.find_less_than_index(valid_key.0);
         if !self.children[index as usize].is_none() {
             let mut i = self.header.non_null_children;
             while i > index {
@@ -268,52 +304,4 @@ unsafe fn _mm_movemask_epi8(input: uint8x16_t) -> i32 {
     // Extract the low 8 bits from each lane and join.
     // 0x4B
     vgetq_lane_u8::<0>(paired64) as i32 | (vgetq_lane_u8::<8>(paired64) as i32) << 8
-}
-
-#[test]
-fn basic_node16_get_child() {
-    // none child case.
-    let mut n6: Node16<String, i32, 8> = Default::default();
-    assert_eq!(n6.get_child((255, true)).is_none(), true);
-    assert_eq!(n6.get_child((179, true)).is_none(), true);
-
-    // has child case.
-    n6.key[10] = 255;
-    n6.children[10] = ArtNode::leaf(255.to_string(), 255 as i32);
-    n6.header.non_null_children = 1;
-    assert_eq!(n6.get_child((255, true)).is_none(), false);
-
-    n6.header.non_null_children = 0;
-    for i in 0..16 {
-        n6.key[i] = (i * 4) as u8;
-        n6.children[i] = ArtNode::leaf(i.to_string(), i as i32);
-        n6.header.non_null_children += 1;
-    }
-
-    assert_eq!(n6.get_child((255, true)).is_none(), true);
-    assert_eq!(n6.get_child((179, true)).is_none(), true);
-
-    for i in (0..16).rev() {
-        assert_eq!(n6.get_child(((i * 4) as u8, true)).is_some(), true);
-    }
-}
-
-// 0 .. 15
-#[test]
-fn basic_sse2_add() {
-    let mut n6: Node16<String, i32, 8> = Default::default();
-    for i in 8..16 {
-        let kb = i * 10 as u8;
-        // n6.key[i] = kb;
-        n6.insert_child((kb, true), ArtNode::leaf(kb.to_string(), kb as i32));
-    }
-    println!("{:?}", n6.key);
-
-    for i in 0..8 {
-        let kb = i * 4 as u8;
-        // n6.key[i] = i as u8;
-        n6.insert_child((kb, true), ArtNode::leaf(kb.to_string(), kb as i32));
-    }
-
-    println!("{:?}", n6.key)
 }
