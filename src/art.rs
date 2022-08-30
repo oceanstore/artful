@@ -45,6 +45,7 @@ where
     size: usize,
     root: ArtNode<K, V, MAX_PARTIAL_LEN>,
 }
+
 impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Art<K, V, MAX_PARTIAL_LEN> {
     pub fn new() -> Art<K, V, MAX_PARTIAL_LEN> {
         Art {
@@ -55,6 +56,15 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Art<K, V, MAX_PARTIAL_
 
     /// Returns a reference to the value corresponding to the key.
     /// The key may be any borrowed form of the map’s key type and must be implementation `ArtKey` trait.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use artful::Art;
+    ///
+    /// let mut art = Art::<i32, &str, 8>::new();
+    /// assert_eq!(art.insert(37, "a"), None);
+    /// assert_eq!(art.insert(37, "b"), Some("a"));
+    /// ```
     pub fn get(&self, key: &K) -> Option<&V> {
         ArtNode::get(&self.root, key.get_bytes(), 0)
     }
@@ -64,6 +74,15 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Art<K, V, MAX_PARTIAL_
     /// If the map did not have this key present, None is returned.
     ///
     /// If the map did have this key present, the value is updated, and the old value is returned. The key is not updated, though;
+    ///
+    /// # Examples
+    /// ```rust
+    /// use artful::Art;
+    ///
+    /// let mut art = Art::<i32, &str, 8>::new();
+    /// let _ = art.insert(1, "a");
+    /// assert_eq!(art.get(&1), Some(&"a"));
+    /// ```
     pub fn insert(&mut self, key: K, val: V) -> Option<V> {
         if let Some(old_val) = ArtNode::insert(&mut self.root, key, val, 0) {
             return Some(old_val);
@@ -86,6 +105,15 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Art<K, V, MAX_PARTIAL_
     ///
     /// For insertion, size is incremented only when the key is different. For deletion size is decremented
     /// only when the key exists.
+    /// # Examples
+    /// ```rust
+    /// use artful::Art;
+    ///
+    /// let mut art = Art::<i32, &str, 8>::new();
+    /// let _ = art.insert(1, "a");
+    /// let _ = art.insert(1, "b");
+    /// assert_eq!(art.size(), 1);
+    /// ```
     #[inline(always)]
     pub fn size(&self) -> usize {
         self.size
