@@ -13,6 +13,13 @@ use std::ops::Deref;
 /// Art is an **adaptive radix tree**, which are also known as radix trees and
 /// prefix trees.
 ///
+/// Art requires 3 generic parameters, where `K` needs to implement the [ArtKey] trait and `V` is
+/// self-explanatory. `MAX_PARTIAL_LEN` specifies the size of the array used by each inner node to
+/// store the common prefix.
+///
+/// **Note:** `MAX_PARTIAL_LEN` is designed as a constant generic parameter because setting its size
+/// requires users trade-off.
+///
 /// Radix tress consist of two types of nodes: inner and leaf nodes. Inner node map
 /// partial keys to other nodes and leaf node store key-value pair.
 ///
@@ -20,7 +27,7 @@ use std::ops::Deref;
 /// search trees is $O(k\log_n)$ and the art complexity of $O(k)$.
 ///
 /// Art key idea that achieves both space and time efficiency is to adaptively use different node size with
-/// the same, relatively large space, but with different fanout.
+/// the same, relatively large space, but with different fan-out.
 ///
 /// Specifically, Art uses four node types of dynamically adaptive representation of inner nodes to
 /// achieve space and time efficiency.
@@ -118,82 +125,6 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Art<K, V, MAX_PARTIAL_
     pub fn size(&self) -> usize {
         self.size
     }
-}
-
-#[test]
-fn basic_art() {
-    let mut art = Art::<String, i32, 10>::new();
-
-    art.insert("aaaaaaaabbbbbbbbcccccd".to_string(), 1);
-    art.insert("aaaaaaaabbbbbbbbccce".to_string(), 2);
-    art.insert("aaaaaaaabbbbbbbbcce".to_string(), 3);
-    art.insert("aaaaaaaabbbbbbcce".to_string(), 4);
-    art.insert("ba".to_string(), 5);
-    art.insert("bar".to_string(), 6);
-    art.insert("baz".to_string(), 7);
-    art.insert("bcd".to_string(), 8);
-    art.insert("bcs".to_string(), 9);
-    art.insert("bcf".to_string(), 10);
-    art.insert("bdb".to_string(), 11);
-    art.insert("bcbc".to_string(), 12);
-    art.insert("bcde".to_string(), 13);
-    art.insert("bcdef".to_string(), 14);
-    art.insert("bcdeff".to_string(), 15);
-    art.insert("abcd".to_string(), 17);
-    art.insert("foo".to_string(), 18);
-    art.insert("X".to_string(), 19);
-    art.insert("x".to_string(), 20);
-    art.insert("xanthaline".to_string(), 21);
-    art.insert("xanthamic".to_string(), 22);
-
-    println!("get {:?}", art.get(&"aaaaaaaabbbbbbbbcccccd".to_string()));
-    println!("get {:?}", art.get(&"aaaaaaaabbbbbbbbccce".to_string()));
-    println!("get {:?}", art.get(&"aaaaaaaabbbbbbbbcce".to_string()));
-    println!("get {:?}", art.get(&"aaaaaaaabbbbbbcce".to_string()));
-    println!("get {:?}", art.get(&"ba".to_string()));
-    println!("get {:?}", art.get(&"bar".to_string()));
-    println!("get {:?}", art.get(&"baz".to_string()));
-    println!("get {:?}", art.get(&"bcd".to_string()));
-    println!("get {:?}", art.get(&"bcs".to_string()));
-    println!("get {:?}", art.get(&"bcf".to_string()));
-    println!("get {:?}", art.get(&"bdb".to_string()));
-    println!("get {:?}", art.get(&"bcbc".to_string()));
-    println!("get {:?}", art.get(&"bcde".to_string()));
-    println!("get {:?}", art.get(&"bcdef".to_string()));
-    println!("get {:?}", art.get(&"bcdeff".to_string()));
-    println!("get {:?}", art.get(&"abcd".to_string()));
-    println!("get {:?}", art.get(&"foo".to_string()));
-    println!("get {:?}", art.get(&"X".to_string()));
-    println!("get {:?}", art.get(&"x".to_string()));
-
-    println!(
-        "remove {:?}",
-        art.remove(&"aaaaaaaabbbbbbbbcccccd".to_string())
-    );
-    println!(
-        "remove {:?}",
-        art.remove(&"aaaaaaaabbbbbbbbccce".to_string())
-    );
-    println!(
-        "remove {:?}",
-        art.remove(&"aaaaaaaabbbbbbbbcce".to_string())
-    );
-    println!("remove {:?}", art.remove(&"aaaaaaaabbbbbbcce".to_string()));
-    println!("remove {:?}", art.remove(&"ba".to_string()));
-    println!("remove {:?}", art.remove(&"bar".to_string()));
-    println!("remove {:?}", art.remove(&"baz".to_string()));
-    println!("remove {:?}", art.remove(&"bcd".to_string()));
-    println!("remove {:?}", art.remove(&"bcs".to_string()));
-    println!("remove {:?}", art.remove(&"bcf".to_string()));
-    println!("remove {:?}", art.remove(&"bdb".to_string()));
-    println!("remove {:?}", art.remove(&"bcbc".to_string()));
-    println!("remove {:?}", art.remove(&"bcde".to_string()));
-    println!("remove {:?}", art.remove(&"bcdef".to_string()));
-    println!("remove {:?}", art.remove(&"bcdeff".to_string()));
-    println!("remove {:?}", art.remove(&"abcd".to_string()));
-    println!("remove {:?}", art.remove(&"foo".to_string()));
-    println!("remove {:?}", art.remove(&"X".to_string()));
-    println!("remove {:?}", art.remove(&"x".to_string()));
 }
 
 #[test]
