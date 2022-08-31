@@ -3,11 +3,11 @@ name = "artful"
 version = "0.1.0"
 authors = ["Jackson Xu <jackson.libc.rs@gmail.com>"]
 description = "Low-memory overhead and high-performance adaptive radix tree"
-keywords = ["art","radix tree" ,"adaptive radix tree", "low-memory", "performance", "simd"]
+keywords = ["radix-tree","adaptive-radix-tree", "performance", "simd"]
 categories = ["datastructure"]
 exclude = []
 edition = "2021"
-license = ""
+license = "Apache-2.0"
 readme = "README.md"
 
 [features]
