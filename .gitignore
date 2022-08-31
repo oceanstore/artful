@@ -1,0 +1,9 @@
+# Rust compiler
+/target
+/Cargo.lock
+
+# Developer
+.idea
+.vscode
+.tags
+*DS_Store
