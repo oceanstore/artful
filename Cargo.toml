@@ -1,11 +1,16 @@
 [package]
 name = "artful"
 version = "0.1.0"
+authors = ["Jackson Xu <jackson.libc.rs@gmail.com>"]
+description = "Low-memory overhead and high-performance adaptive radix tree"
+keywords = ["art","radix tree" ,"adaptive radix tree", "low-memory", "performance", "simd"]
+categories = ["datastructure"]
+exclude = []
 edition = "2021"
+license = ""
+readme = "README.md"
 
 [features]
 simd = []
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

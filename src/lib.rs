@@ -18,9 +18,15 @@ use std::vec;
 
 use crate::node::ArtNode;
 
+/// A trait some constraints on the key of art.
+///
+/// Artful implements this trait for most of the built-in types. If you want to
+/// customize the type as an artful key, you will need to implement the trait.
 pub trait ArtKey: Default {
+    /// Returns a reference to a byte slice from a particular type.
     fn get_bytes(&self) -> &[u8];
 
+    /// Returns a mutable reference to a byte slice from a particular type.
     fn get_mut_bytes(&mut self) -> &mut [u8];
 }
 
