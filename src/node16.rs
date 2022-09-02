@@ -1,15 +1,16 @@
+#![allow(unused_variables)]
+#![allow(unused_imports)]
 use crate::node::ArtNode;
 use crate::node4::Node4;
 use crate::node48::Node48;
+use crate::ArtKey;
 use crate::Header;
-use crate::{Art, ArtKey};
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
-use std::ptr::copy_nonoverlapping;
 
 pub(crate) struct Node16<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
     pub(crate) header: Header<MAX_PARTIAL_LEN>,
@@ -235,8 +236,6 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTIAL_LEN> {
             assert_eq!(self.prefixed_child.is_none(), false);
             return Some(std::mem::take(&mut self.prefixed_child));
         }
-
-        let idx = self.find_child_index(valid_key.0)?;
 
         // TODO: 这一次的查找可以优化为从外部传递.
         let mut idx = self.find_child_index(valid_key.0)?;

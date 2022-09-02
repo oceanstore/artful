@@ -1,7 +1,5 @@
 use std::cmp::min;
 use std::marker::PhantomData;
-use std::mem::take;
-use std::ptr::copy_nonoverlapping;
 
 use crate::leaf::Leaf;
 use crate::node16::Node16;
@@ -618,7 +616,6 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PARTIAL_LEN> 
     const fn static_cast_ref_leaf(&self) -> &Leaf<K, V> {
         match self.0 & NODE_TYPE_MASK {
             NODE_TYPE_LEAF => {
-                // mov rax, qword ptr [rax]
                 let leaf_ptr: *const Leaf<K, V> = (self.0 & NODE_PTR_MASK) as *const Leaf<K, V>;
                 let leaf_ref: &Leaf<K, V> = unsafe { &*leaf_ptr };
                 leaf_ref

@@ -1,8 +1,7 @@
-use crate::node::{ArtNode, ArtNodeMut, ArtNodeRef};
+use crate::node::ArtNode;
 use crate::node16::Node16;
 use crate::ArtKey;
 use crate::Header;
-use std::mem::take;
 
 pub(crate) struct Node4<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
     pub(crate) header: Header<MAX_PARTIAL_LEN>,

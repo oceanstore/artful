@@ -1,14 +1,5 @@
-use crate::leaf;
-use crate::leaf::Leaf;
 use crate::node::ArtNode;
-use crate::node::ArtNodeMut;
-use crate::node::ArtNodeRef;
-use crate::node4::Node4;
 use crate::ArtKey;
-use crate::Partial;
-use std::cmp::min;
-use std::mem::take;
-use std::ops::Deref;
 
 /// Art is an **adaptive radix tree**, which are also known as radix trees and
 /// prefix trees.
