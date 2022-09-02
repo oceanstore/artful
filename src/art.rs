@@ -47,13 +47,12 @@ use std::ops::Deref;
 pub struct Art<K, V, const MAX_PARTIAL_LEN: usize = 8>
 where
     K: ArtKey,
-    V: Default,
 {
     size: usize,
     root: ArtNode<K, V, MAX_PARTIAL_LEN>,
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Art<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Art<K, V, MAX_PARTIAL_LEN> {
     pub fn new() -> Art<K, V, MAX_PARTIAL_LEN> {
         Art {
             size: 0,

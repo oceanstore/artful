@@ -7,15 +7,13 @@ use std::process::id;
 
 const FULL_NODE_SIZE: u16 = 256;
 
-pub(crate) struct Node256<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
+pub(crate) struct Node256<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
     pub(crate) header: Header<MAX_PARTIAL_LEN>,
     pub(crate) children: [ArtNode<K, V, MAX_PARTIAL_LEN>; 256],
     pub(crate) prefixed_child: ArtNode<K, V, MAX_PARTIAL_LEN>,
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
-    for Node256<K, V, MAX_PARTIAL_LEN>
-{
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Default for Node256<K, V, MAX_PARTIAL_LEN> {
     fn default() -> Node256<K, V, MAX_PARTIAL_LEN> {
         // Why dont' i use macro `vec![]` initialize the children?
         // just like, you know `vec![ArtNode::none(); 16].try_into()...`.
@@ -294,7 +292,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
     }
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node256<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node256<K, V, MAX_PARTIAL_LEN> {
     #[inline(always)]
     pub(crate) fn is_full(&self) -> bool {
         self.header.non_null_children == FULL_NODE_SIZE

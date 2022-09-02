@@ -11,16 +11,14 @@ use std::arch::x86::*;
 use std::arch::x86_64::*;
 use std::ptr::copy_nonoverlapping;
 
-pub(crate) struct Node16<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
+pub(crate) struct Node16<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
     pub(crate) header: Header<MAX_PARTIAL_LEN>,
     pub(crate) key: [u8; 16],
     pub(crate) children: [ArtNode<K, V, MAX_PARTIAL_LEN>; 16],
     pub(crate) prefixed_child: ArtNode<K, V, MAX_PARTIAL_LEN>,
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
-    for Node16<K, V, MAX_PARTIAL_LEN>
-{
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Default for Node16<K, V, MAX_PARTIAL_LEN> {
     fn default() -> Node16<K, V, MAX_PARTIAL_LEN> {
         // Why dont' i use macro `vec![]` initialize the children?
         // just like, you know `vec![ArtNode::none(); 16].try_into()...`.
@@ -52,7 +50,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
     }
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTIAL_LEN> {
     #[inline(always)]
     pub(crate) fn is_full(&self) -> bool {
         self.header.non_null_children == 16

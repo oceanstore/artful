@@ -6,16 +6,14 @@ use crate::Header;
 
 const EMPTY_INDEX: u8 = 48;
 
-pub(crate) struct Node48<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
+pub(crate) struct Node48<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
     pub(crate) header: Header<MAX_PARTIAL_LEN>,
     pub(crate) child_index: [u8; 256], // invert index of children
     pub(crate) children: [ArtNode<K, V, MAX_PARTIAL_LEN>; 48],
     pub(crate) prefixed_child: ArtNode<K, V, MAX_PARTIAL_LEN>,
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
-    for Node48<K, V, MAX_PARTIAL_LEN>
-{
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Default for Node48<K, V, MAX_PARTIAL_LEN> {
     fn default() -> Node48<K, V, MAX_PARTIAL_LEN> {
         Node48 {
             header: Default::default(),
@@ -75,7 +73,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
     }
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node48<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node48<K, V, MAX_PARTIAL_LEN> {
     #[inline(always)]
     pub(crate) fn is_full(&self) -> bool {
         self.header.non_null_children == 48

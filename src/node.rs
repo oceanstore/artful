@@ -21,13 +21,13 @@ const NODE_TYPE_MASK: usize = 7;
 const NODE_PTR_MASK: usize = usize::MAX - NODE_TYPE_MASK;
 
 // TODO: impl PartialEq for ArtNode
-pub struct ArtNode<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize>(
+pub struct ArtNode<K: ArtKey, V, const MAX_PARTIAL_LEN: usize>(
     pub(crate) usize,
     PhantomData<K>,
     PhantomData<V>,
 );
 
-pub(crate) enum ArtNodeRef<'a, K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
+pub(crate) enum ArtNodeRef<'a, K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
     None,
     Leaf(&'a Leaf<K, V>),
     Node4(&'a Node4<K, V, MAX_PARTIAL_LEN>),
@@ -36,7 +36,7 @@ pub(crate) enum ArtNodeRef<'a, K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usi
     Node256(&'a Node256<K, V, MAX_PARTIAL_LEN>),
 }
 
-pub(crate) enum ArtNodeMut<'a, K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
+pub(crate) enum ArtNodeMut<'a, K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
     None,
     Leaf(&'a mut Leaf<K, V>),
     Node4(&'a mut Node4<K, V, MAX_PARTIAL_LEN>),
@@ -78,7 +78,7 @@ impl LazyExpand {
     ///
     /// **Safety**: the existing_leaf must be a leaf node.
     #[inline]
-    fn expand<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize>(
+    fn expand<K: ArtKey, V, const MAX_PARTIAL_LEN: usize>(
         node: ArtNode<K, V, MAX_PARTIAL_LEN>,
         key: K,
         val: V,
@@ -106,7 +106,7 @@ impl LazyExpand {
     }
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PARTIAL_LEN> {
     pub(crate) fn get<'a>(
         root: &'a ArtNode<K, V, MAX_PARTIAL_LEN>,
         key: &[u8],
@@ -640,18 +640,6 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PART
         }
     }
 
-    #[inline(always)]
-    fn dynamic_cast_leaf(self) -> Leaf<K, V> {
-        match self.0 & NODE_TYPE_MASK {
-            NODE_TYPE_LEAF => {
-                let leaf_ptr: *mut Leaf<K, V> = (self.0 & NODE_PTR_MASK) as *mut Leaf<K, V>;
-                let leaf_mut: &mut Leaf<K, V> = unsafe { &mut *leaf_ptr };
-                std::mem::take(leaf_mut)
-            }
-            _ => unreachable!(),
-        }
-    }
-
     /// convert ArtNode to ArtNodeRef by type.
     ///
     /// If `self` it an inner node, it first convert the usize to a ptr and
@@ -729,7 +717,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> ArtNode<K, V, MAX_PART
     }
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Drop for ArtNode<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Drop for ArtNode<K, V, MAX_PARTIAL_LEN> {
     fn drop(&mut self) {
         match self.0 & NODE_TYPE_MASK {
             NODE_TYPE_NONE => {}
@@ -758,9 +746,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Drop for ArtNode<K, V,
     }
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
-    for ArtNode<K, V, MAX_PARTIAL_LEN>
-{
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Default for ArtNode<K, V, MAX_PARTIAL_LEN> {
     fn default() -> ArtNode<K, V, MAX_PARTIAL_LEN> {
         ArtNode::none()
     }
