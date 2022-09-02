@@ -4,6 +4,11 @@ Artful is an **adaptive radix tree** library for Rust. At a high-level, it's lik
 
 Artful is available on [crates.io](https://crates.io/crates/artful), and API Documentation is available on [docs.rs](https://docs.rs/artful/latest/artful).
 
+## Features
+
+- API similar to a `BTreeMap<K,V>`
+- Support SIMD instructions operations
+
 ## Using Artful
 
 [Artful is available on crates.io](https://crates.io/crates/artful) The recommended way to use it is to add a line into your Cargo.toml such as:
