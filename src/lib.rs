@@ -8,16 +8,6 @@ mod node48;
 mod simd;
 pub use art::Art;
 
-use std::alloc::alloc;
-use std::alloc::dealloc;
-use std::alloc::handle_alloc_error;
-use std::ptr::copy;
-use std::ptr::copy_nonoverlapping;
-use std::ptr::NonNull;
-use std::vec;
-
-use crate::node::ArtNode;
-
 /// A trait some constraints on the key of art.
 ///
 /// Artful implements this trait for most of the built-in types. If you want to
@@ -54,7 +44,7 @@ impl ArtKey for i64 {
     }
 }
 
-impl ArtKey for std::string::String {
+impl ArtKey for String {
     fn get_bytes(&self) -> &[u8] {
         self.as_bytes()
     }

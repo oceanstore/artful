@@ -78,7 +78,6 @@ mod dataset_test {
     fn test_get_insert_remove_get() {
         for file in FILES.iter() {
             let mut art = Art::<String, String>::new();
-            let mut lines = 0;
             let read_buf = read_dataset(*file);
             for line in read_buf.lines() {
                 let line = line.expect("read words line failed");
@@ -87,7 +86,6 @@ mod dataset_test {
                 assert_eq!(art.get(&line), Some(&line));
                 assert_eq!(art.remove(&line), Some(line.clone()));
                 assert_eq!(art.get(&line), None);
-                lines += 1;
             }
             assert_eq!(art.size(), 0);
         }
@@ -110,7 +108,7 @@ mod dataset_test {
             // random keys in the byte len range randomly
             let read_buf = read_dataset(*file);
             let mut hit_lines = 0;
-            for (index, line) in read_buf.lines().enumerate() {
+            for (_index, line) in read_buf.lines().enumerate() {
                 let line = line.expect("read words line failed");
                 let byte_len = line.as_str().as_bytes().len();
                 if byte_len >= byte_len_range.0 && byte_len <= byte_len_range.1 {
@@ -122,7 +120,7 @@ mod dataset_test {
 
             // get insert get
             let read_buf = read_dataset(*file);
-            for (index, line) in read_buf.lines().enumerate() {
+            for (_index, line) in read_buf.lines().enumerate() {
                 let line = line.expect("read words line failed");
                 let byte_len = line.as_str().as_bytes().len();
                 if byte_len >= byte_len_range.0 && byte_len <= byte_len_range.1 {

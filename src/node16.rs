@@ -1,26 +1,25 @@
+#![allow(unused_variables)]
+#![allow(unused_imports)]
 use crate::node::ArtNode;
 use crate::node4::Node4;
 use crate::node48::Node48;
+use crate::ArtKey;
 use crate::Header;
-use crate::{Art, ArtKey};
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
-use std::ptr::copy_nonoverlapping;
 
-pub(crate) struct Node16<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
+pub(crate) struct Node16<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
     pub(crate) header: Header<MAX_PARTIAL_LEN>,
     pub(crate) key: [u8; 16],
     pub(crate) children: [ArtNode<K, V, MAX_PARTIAL_LEN>; 16],
     pub(crate) prefixed_child: ArtNode<K, V, MAX_PARTIAL_LEN>,
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
-    for Node16<K, V, MAX_PARTIAL_LEN>
-{
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Default for Node16<K, V, MAX_PARTIAL_LEN> {
     fn default() -> Node16<K, V, MAX_PARTIAL_LEN> {
         // Why dont' i use macro `vec![]` initialize the children?
         // just like, you know `vec![ArtNode::none(); 16].try_into()...`.
@@ -52,7 +51,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default
     }
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTIAL_LEN> {
     #[inline(always)]
     pub(crate) fn is_full(&self) -> bool {
         self.header.non_null_children == 16
@@ -237,8 +236,6 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node16<K, V, MAX_PARTI
             assert_eq!(self.prefixed_child.is_none(), false);
             return Some(std::mem::take(&mut self.prefixed_child));
         }
-
-        let idx = self.find_child_index(valid_key.0)?;
 
         // TODO: 这一次的查找可以优化为从外部传递.
         let mut idx = self.find_child_index(valid_key.0)?;

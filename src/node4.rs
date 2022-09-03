@@ -1,17 +1,16 @@
-use crate::node::{ArtNode, ArtNodeMut, ArtNodeRef};
+use crate::node::ArtNode;
 use crate::node16::Node16;
 use crate::ArtKey;
 use crate::Header;
-use std::mem::take;
 
-pub(crate) struct Node4<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> {
+pub(crate) struct Node4<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> {
     pub(crate) header: Header<MAX_PARTIAL_LEN>,
     pub(crate) key: [u8; 4],
     pub(crate) children: [ArtNode<K, V, MAX_PARTIAL_LEN>; 4],
     pub(crate) prefixed_child: ArtNode<K, V, MAX_PARTIAL_LEN>,
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default for Node4<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Default for Node4<K, V, MAX_PARTIAL_LEN> {
     fn default() -> Node4<K, V, MAX_PARTIAL_LEN> {
         Node4 {
             header: Default::default(),
@@ -27,7 +26,7 @@ impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Default for Node4<K, V
     }
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Node4<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Node4<K, V, MAX_PARTIAL_LEN> {
     #[inline(always)]
     pub(crate) fn is_full(&self) -> bool {
         self.header.non_null_children == 4

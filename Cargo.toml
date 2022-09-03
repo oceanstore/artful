@@ -1,6 +1,6 @@
 [package]
 name = "artful"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Jackson Xu <jackson.libc.rs@gmail.com>"]
 description = "Low-memory overhead and high-performance adaptive radix tree"
 keywords = ["radix-tree","adaptive-radix-tree", "performance", "simd"]
@@ -9,6 +9,7 @@ exclude = []
 edition = "2021"
 license = "Apache-2.0"
 readme = "README.md"
+documentation="https://docs.rs/artful"
 
 [features]
 simd = []

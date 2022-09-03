@@ -15,7 +15,7 @@ Artful is available on [crates.io](https://crates.io/crates/artful), and API Doc
 
 ```rust
 [dependencies]
-artful = "0.1.0"
+artful = "0.1.1"
 ```
 
 ## Contribution

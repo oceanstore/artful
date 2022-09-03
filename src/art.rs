@@ -1,14 +1,5 @@
-use crate::leaf;
-use crate::leaf::Leaf;
 use crate::node::ArtNode;
-use crate::node::ArtNodeMut;
-use crate::node::ArtNodeRef;
-use crate::node4::Node4;
 use crate::ArtKey;
-use crate::Partial;
-use std::cmp::min;
-use std::mem::take;
-use std::ops::Deref;
 
 /// Art is an **adaptive radix tree**, which are also known as radix trees and
 /// prefix trees.
@@ -47,13 +38,12 @@ use std::ops::Deref;
 pub struct Art<K, V, const MAX_PARTIAL_LEN: usize = 8>
 where
     K: ArtKey,
-    V: Default,
 {
     size: usize,
     root: ArtNode<K, V, MAX_PARTIAL_LEN>,
 }
 
-impl<K: ArtKey, V: Default, const MAX_PARTIAL_LEN: usize> Art<K, V, MAX_PARTIAL_LEN> {
+impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Art<K, V, MAX_PARTIAL_LEN> {
     pub fn new() -> Art<K, V, MAX_PARTIAL_LEN> {
         Art {
             size: 0,
