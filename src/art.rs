@@ -66,6 +66,28 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Art<K, V, MAX_PARTIAL_LEN> {
         ArtNode::get(&self.root, key.get_bytes(), 0)
     }
 
+    /// Returns a mutable reference to the value corresponding to the key.
+    ///
+    ///
+    /// The key may be any borrowed form of the map’s key type and must be implementation `ArtKey` trait.
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// use artful::Art;
+    ///
+    /// let mut art = Art::<i32, &str, 8>::new();
+    /// art.insert(1, "a");
+    /// if let Some(x) = art.get_mut(&1) {
+    ///     *x = "b";
+    /// }
+    /// assert_eq!(art.get(&1), Some(&"b"));
+    /// ```
+    pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+        ArtNode::get_mut(&mut self.root, key.get_bytes(), 0)
+    }
+
     /// Inserts a key-value pair into the map.
     ///
     /// If the map did not have this key present, None is returned.
@@ -129,8 +151,15 @@ fn basic_one_hundred() {
     }
 
     for i in 0..1000000 {
-        art.insert(i, i);
+        let old_val = art.get_mut(&i).unwrap();
+        *old_val += 1;
+        assert_eq!(art.get(&i), Some(&(i + 1)))
+    }
+    assert_eq!(1000000, art.size);
+
+    for i in 0..1000000 {
+        assert_eq!(art.remove(&i), Some(i + 1))
     }
 
-    assert_eq!(1000000, art.size);
+    assert_eq!(0, art.size);
 }
