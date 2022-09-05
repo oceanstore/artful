@@ -66,6 +66,26 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Art<K, V, MAX_PARTIAL_LEN> {
         ArtNode::get(&self.root, key.get_bytes(), 0)
     }
 
+    /// Returns the key-value pair corresponding to the supplied key.
+    ///
+    /// The key may be any borrowed form of the map’s key type and must be implementation `ArtKey` trait.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use artful::Art;
+    /// let mut art = Art::<i32, &str, 8>::new();
+    /// art.insert(1, "a");
+    /// assert_eq!(art.get_key_value(&1), Some((&1, &"a")));
+    /// assert_eq!(art.get_key_value(&2), None);
+    /// ```
+    pub fn get_key_value<'a>(&'a self, key: &'a K) -> Option<(&'a K, &'a V)> {
+        if let Some(val) = ArtNode::get(&self.root, key.get_bytes(), 0) {
+            return Some((key, &*val));
+        }
+
+        None
+    }
+
     /// Returns a mutable reference to the value corresponding to the key.
     ///
     ///
