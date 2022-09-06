@@ -159,27 +159,81 @@ impl<K: ArtKey, V, const MAX_PARTIAL_LEN: usize> Art<K, V, MAX_PARTIAL_LEN> {
     }
 }
 
-#[test]
-fn basic_one_hundred() {
-    let mut art = Art::<i32, i32, 8>::new();
-    for i in (0..1000000).rev() {
-        assert_eq!(art.insert(i, i), None);
+#[cfg(test)]
+mod test {
+    use super::Art;
+    use super::ArtKey;
+    fn primitive<
+        T: ArtKey
+            + Copy
+            + std::cmp::PartialEq
+            + std::fmt::Debug
+            + std::ops::AddAssign<T>
+            + std::ops::Div<Output = T>
+            + std::ops::Add<Output = T>,
+    >(
+        range: impl Iterator<Item = T> + std::clone::Clone,
+        mut_value: T,
+    ) {
+        let mut art = Art::<T, T, 8>::new();
+        // get after insert and get
+        for i in range.clone().into_iter() {
+            assert_eq!(art.get(&i), None);
+            assert_eq!(art.insert(i, i), None);
+            assert_eq!(art.get(&i), Some(&i));
+        }
+
+        // get_mut after get
+        for i in range.clone().into_iter() {
+            let old_val = art.get_mut(&i).unwrap();
+            *old_val += mut_value;
+            assert_eq!(art.get(&i), Some(&(i + mut_value)))
+        }
+
+        // remove after get
+        for i in range.into_iter() {
+            assert_eq!(art.remove(&i), Some(i + mut_value));
+            assert_eq!(art.get(&i), None)
+        }
     }
 
-    for i in 0..1000000 {
-        assert_eq!(art.get(&i), Some(&i))
+    #[test]
+    fn basic_primitive_i8() {
+        primitive::<i8>(i8::MIN..i8::MAX, 1);
     }
 
-    for i in 0..1000000 {
-        let old_val = art.get_mut(&i).unwrap();
-        *old_val += 1;
-        assert_eq!(art.get(&i), Some(&(i + 1)))
-    }
-    assert_eq!(1000000, art.size);
-
-    for i in 0..1000000 {
-        assert_eq!(art.remove(&i), Some(i + 1))
+    #[test]
+    fn basic_primitive_i16() {
+        primitive::<i16>(i16::MIN..i16::MAX, 1);
     }
 
-    assert_eq!(0, art.size);
+    #[test]
+    fn basic_primitive_i32() {
+        primitive::<i32>(-1000000..10000000, 1);
+    }
+
+    #[test]
+    fn basic_primitive_i64() {
+        primitive::<i64>(-1000000..10000000, 1);
+    }
+
+    #[test]
+    fn basic_primitive_u8() {
+        primitive::<u8>(u8::MIN..u8::MAX, 1);
+    }
+
+    #[test]
+    fn basic_primitive_u16() {
+        primitive::<u16>(u16::MIN..u16::MAX, 1);
+    }
+
+    #[test]
+    fn basic_primitive_u32() {
+        primitive::<u32>(0..10000000, 1);
+    }
+
+    #[test]
+    fn basic_primitive_u64() {
+        primitive::<u64>(0..10000000, 1);
+    }
 }
