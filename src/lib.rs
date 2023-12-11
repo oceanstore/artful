@@ -5,7 +5,10 @@ mod node16;
 mod node256;
 mod node4;
 mod node48;
+
+#[cfg(feature = "simd")]
 mod simd;
+
 pub use art::Art;
 
 /// A trait some constraints on the key of art.

@@ -1,5 +1,8 @@
+#[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+use std::arch::aarch64::*;
+
+
 #[inline]
-#[cfg(feature = "simd")]
 #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
 pub(crate) unsafe fn _mm_movemask_epi8(input: uint8x16_t) -> i32 {
     // Example input (half scale):
